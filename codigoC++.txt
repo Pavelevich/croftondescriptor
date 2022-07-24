@@ -1,0 +1,822 @@
+#include <iostream>
+#include <cstdlib>
+#include <cstdio>
+#include <cmath>
+#include <fstream>
+#include "cuda_runtime.h"
+#include "device_launch_parameters.h"
+
+
+using namespace std;
+
+typedef float** Matriz; //para la matriz de resultados
+const float PI = 3.1415927;
+
+void impresion(float M[], int filas, int columnas){
+//	std::cout << "!!!Hello    World!!!" << std::endl; // prints !!!Hello World!!!
+
+
+	// Dibujamos la Matriz en pantalla
+	for (int j=0; j<columnas; j++) printf("  %8.4f", (float)j );
+	printf("\n\n");
+	for (int i=0; i<filas; i++)
+		{	printf("%d ",i);
+			for (int j=0; j<columnas; j++)
+				printf("  %8.4f", M[i*columnas+j] );
+			printf("\n");
+		}
+	printf("\n");
+	printf("%d ",-1);
+	for (int j=0; j<columnas; j++) printf("  %8.4f", (float)j);
+
+}
+
+
+float Sdiametro(float *borde,int columnas) //filas es 2, es un borde
+{ //este es un kernel, cada thread es un pto del contorno, calcula mayor distancia desde
+	//el a los demas, despues obtener el mayor
+
+	float d=0, dist_temp=0, dist_X, dist_Y;
+
+	for (int i=0; i<239-1; i++) //recorre todos los puntos
+	{
+		for (int j=i+1; j<239; j++) //halla distancias a todos los demas puntos
+		{
+			dist_X=pow((borde[0*239+i]-borde[0*239+j]),2);
+			dist_Y=pow((borde[1*239+i]-borde[1*239+j]),2);
+			dist_temp=sqrt(dist_X+dist_Y); //sqrt((x-x1)^2-(y-y1)^2)
+			if(d<=dist_temp)
+                d=dist_temp;
+                else d=d;
+		}
+	}
+	return d;
+	}// diametro
+__device__ float proyectY(float x,float y,float angle)
+{
+        return x*sinf(-angle) + y*cosf(angle);
+}
+
+
+void SproyectX(float borde[],int columnas, int phi,float *SProyX)
+{
+
+
+	float angulo;
+
+	for (int i=0; i<phi; i++)
+	{	angulo=(i*PI)/180;
+		for (int j=0; j<columnas; j++)
+			SProyX[i*columnas+j]=borde[0*columnas+j]*cos(angulo)+borde[1*columnas+j]*sin(angulo);
+
+
+	}
+
+
+}
+
+
+__device__ void interpolar(float boundary[2*239],int indx[239],int i,int j,int m,float p,float angle, float p2[],int N)
+{    
+	//indx es arreglo de puntos que cumplen condicion de diferencia
+	//i,j indices dentro de indx
+	//m tama�o de sentido
+	//p distancia que se esta valorando
+	//angle que se esta valorando
+		//devuelve un arreglo de dos componentes que son el punto interpolado
+
+if(i==-1) //si la posici�n en la cadena es anterior al primer punto, se toma el ultimo
+    i=m-1;
+else if (j==-1)
+    j=m-1;
+
+float p0[2]={boundary[0*N+indx[i]],boundary[1*N+indx[i]]};
+float p1[2]={boundary[0*N+indx[j]],boundary[1*N+indx[j]]};
+//float p2[2]; //punto a devolver
+
+//a partir de aqui es para interseccion de rectas
+//los coeficientes de la linea para obtener la interseccion, A, B, C
+float A2=cosf(angle), B2=sinf(angle), C2=-p, pendiente, A1, B1, C1, x, y;
+
+if (p0[0]!=p1[0])
+{
+	pendiente = (p0[1]-p1[1])/(p0[0]-p1[0]);
+
+	// Ecuacion de la recta
+	A1 = pendiente;
+	B1 = -1;
+	C1 = p0[1]-pendiente*p0[0];
+
+	if (B1==-B2||B1==B2)  //%rectas paralelas
+	{
+		x= (p0[0]+p1[0])/2;
+		y= (p0[1]+p1[1])/2;
+	}
+	else
+	{
+		y = (A1*C2-A2*C1)/(A2*B1-A1*B2);
+		x = (-B2*y-C2)/A2;
+	}
+}
+else
+{
+	if ( -1 == -B2) // %rectas paralelas
+	{
+		x= (p0[0]+p1[0])/2;
+		y= (p0[1]+p1[1])/2;
+	}
+	else
+	{
+		x = p0[0];
+		y = (-A2*x-C2)/B2;
+	}
+
+}
+p2[0]=x; p2[1]=y;
+}
+__device__ void screateListEtq(int  sentido[],float *boundary,int indx[], int col_sentido, float angle, int p, float *etq,int &ind_etq)
+{
+	//este crea la lista de etiquetas para poder determinar los segmentos
+
+	int N=239;
+	//col_sentido es el tama�o de sentido y de indx
+    
+	int T[18*4];
+			T[0]=1;
+			T[1]=3;
+			T[2]=9;
+			T[3]=-1;
+
+			T[4]=1;
+			T[5]=3;
+			T[6]=2;
+			T[7]=-1;
+
+			T[8]=0;
+			T[9]=0;
+			T[10]=0;
+			T[11]=-1;
+
+			T[12]=6;
+			T[13]=4;
+			T[14]=5;
+			T[15]=18;
+
+			T[16]=8;
+			T[17]=4;
+            T[18]=7;
+			T[19]=17;
+
+			T[20]=0;
+			T[21]=0;
+			T[22]=0;
+			T[23]=-1;
+
+			T[24]=0;
+			T[25]=0;
+			T[26]=0;
+			T[27]=-1;
+
+			T[28]=0;
+			T[29]=0;
+			T[30]=0;
+			T[31]=-1;
+
+			T[32]=0;
+			T[33]=0;
+			T[34]=0;
+			T[35]=-1;
+
+
+			T[36]=10;
+			T[37]=11;
+			T[38]=9;
+			T[39]=-1;
+
+			T[40]=0;
+			T[41]=0;
+			T[42]=0;
+			T[43]=-1;
+
+			T[44]=13;
+			T[45]=14;
+			T[46]=12;
+			T[47]=-19;
+
+			T[48]=0;
+			T[49]=0;
+			T[50]=0;
+			T[51]=-1;
+
+			T[52]=0;
+			T[53]=0;
+			T[54]=0;
+			T[55]=-1;
+
+			T[56]=14;
+			T[57]=13;
+			T[58]=15;
+			T[59]=-16;
+
+			T[60]=-1;
+			T[61]=-1;
+			T[62]=-1;
+			T[63]=-2;
+
+			T[64]=0;
+			T[65]=0;
+			T[66]=0;
+			T[67]=-1;
+
+			T[68]=0;
+			T[69]=0;
+			T[70]=0;
+			T[71]=-1;
+
+	int q=0; //%stado inicial
+	int k=0; //%recorrer la cadena de caracteres
+	float tmp[2], Pk1[2], Pk2[2], Pint[2], Pk1y, Pk2y; //punto temporal
+	ind_etq=0;
+
+
+
+	while (k<col_sentido)  //%mientras existan caracteres que analizar
+	 {
+         q = T[q*4+sentido[k]]; //estado
+         switch(q)
+         {
+         	 case 0:
+         		 k=k-1;
+         		 break;
+
+             case 2:// %caso de cambio de signo,obtener punto intermedio entre ambos
+                  //    %puntos y guardar ese punto con la etiqueta
+                  //   %correspondiente, en este caso 1 porque es de distancia
+				  //   %negativa a distancia positiva
+
+				// %interpolar
+
+				 interpolar(boundary,indx,k-1,k,col_sentido,p,angle,Pint,N);
+				 etq[0*col_sentido+ind_etq]=1;
+				 etq[1*col_sentido+ind_etq]=Pint[0];
+				 etq[2*col_sentido+ind_etq]=Pint[1];
+				 ind_etq++; //incrementar indice del arreglo etq
+
+				 // %retroceder
+				 k=k-1;
+				 break;
+
+			 case 5: // %cruce por cero
+
+				etq[0*col_sentido+ind_etq]=1;
+				etq[1*col_sentido+ind_etq]=boundary[0*N+indx[k-1]];
+				etq[2*col_sentido+ind_etq]=boundary[1*N+indx[k-1]];
+				ind_etq++; //incrementar indice del arreglo etq
+				 //%retroceder
+				 k=k-1;
+				 break;
+
+			 case 6: //%punta
+				 //%retroceder
+				 k=k-1;
+				 break;
+
+			 case 8: //casos de segmentos frontera
+
+				 Pk1[0] = tmp[0]; Pk1[1]=tmp[1];
+				 Pk2[0] = boundary[0*col_sentido+indx[k-1]]; Pk2[1]=boundary[1*col_sentido+indx[k-1]];
+
+				 Pk1y = proyectY(Pk1[0],Pk1[1],angle);
+				 Pk2y = proyectY(Pk2[0],Pk2[1],angle);
+
+				 if(Pk1y>Pk2y)
+				 {
+					etq[0*col_sentido+ind_etq]=1;
+					etq[1*col_sentido+ind_etq]=Pk1[0];
+					etq[2*col_sentido+ind_etq]=Pk1[1];
+
+					etq[0*col_sentido+(ind_etq+1)]=3;
+					etq[1*col_sentido+(ind_etq+1)]=Pk1[0];
+					etq[2*col_sentido+(ind_etq+1)]=Pk1[1];
+
+					etq[0*col_sentido+(ind_etq+2)]=3;
+					etq[1*col_sentido+(ind_etq+2)]=Pk2[0];
+					etq[2*col_sentido+(ind_etq+2)]=Pk2[1];
+
+					etq[0*col_sentido+(ind_etq+3)]=2;
+					etq[1*col_sentido+(ind_etq+3)]=Pk2[0];
+					etq[2*col_sentido+(ind_etq+3)]=Pk2[1];
+				 }
+				 else
+				 {
+					etq[0*col_sentido+ind_etq]=2;
+					etq[1*col_sentido+ind_etq]=Pk2[0];
+					etq[2*col_sentido+ind_etq]=Pk2[1];
+
+					etq[0*col_sentido+(ind_etq+1)]=3;
+					etq[1*col_sentido+(ind_etq+1)]=Pk2[0];
+					etq[2*col_sentido+(ind_etq+1)]=Pk2[1];
+
+					etq[0*col_sentido+(ind_etq+2)]=3;
+					etq[1*col_sentido+(ind_etq+2)]=Pk1[0];
+					etq[2*col_sentido+(ind_etq+2)]=Pk1[1];
+
+					etq[0*col_sentido+(ind_etq+3)]=1;
+					etq[1*col_sentido+(ind_etq+3)]=Pk1[0];
+					etq[2*col_sentido+(ind_etq+3)]=Pk1[1];
+				 }
+                 //%retroseder
+				 ind_etq=ind_etq+4;
+				 k=k-1;
+				 break;
+
+			 case 7:  //segmentos frontera
+
+				 Pk1[0] = tmp[0]; Pk1[1]=tmp[1];
+				 Pk2[0] = boundary[0*N+indx[k-1]]; Pk2[1]=boundary[1*N+indx[k-1]];
+
+				 Pk1y = proyectY(Pk1[0],Pk1[1],angle);
+				 Pk2y = proyectY(Pk2[0],Pk2[1],angle);
+
+				 if(Pk1y>Pk2y)
+				 {
+					etq[0*col_sentido+ind_etq]=1;
+					etq[1*col_sentido+ind_etq]=Pk1[0];
+					etq[2*col_sentido+ind_etq]=Pk1[1];
+
+					etq[0*col_sentido+(ind_etq+1)]=3;
+					etq[1*col_sentido+(ind_etq+1)]=Pk1[0];
+					etq[2*col_sentido+(ind_etq+1)]=Pk1[1];
+
+					etq[0*col_sentido+(ind_etq+2)]=3;
+					etq[1*col_sentido+(ind_etq+2)]=Pk2[0];
+					etq[2*col_sentido+(ind_etq+2)]=Pk2[1];
+
+					etq[0*col_sentido+(ind_etq+3)]=1;
+					etq[1*col_sentido+(ind_etq+3)]=Pk2[0];
+					etq[2*col_sentido+(ind_etq+3)]=Pk2[1];
+				 }
+				 else
+				 {
+					etq[0*col_sentido+ind_etq]=1;
+					etq[1*col_sentido+ind_etq]=Pk2[0];
+					etq[2*col_sentido+ind_etq]=Pk2[1];
+
+					etq[0*col_sentido+(ind_etq+1)]=3;
+					etq[1*col_sentido+(ind_etq+1)]=Pk2[0];
+					etq[2*col_sentido+(ind_etq+1)]=Pk2[1];
+
+					etq[0*col_sentido+(ind_etq+2)]=3;
+					etq[1*col_sentido+(ind_etq+2)]=Pk1[0];
+					etq[2*col_sentido+(ind_etq+2)]=Pk1[1];
+
+					etq[0*col_sentido+(ind_etq+3)]=1;
+					etq[1*col_sentido+(ind_etq+3)]=Pk1[0];
+					etq[2*col_sentido+(ind_etq+3)]=Pk1[1];
+				 }
+				 ind_etq=ind_etq+4;
+                 //%retroseder
+				 k=k-1;
+				 break;
+
+             case 3:// %caso especial comienzo de segmento frontera
+            	 tmp[0] = boundary[0*N+indx[k]];
+            	 tmp[1] = boundary[1*N+indx[k]];
+            	 break;
+
+
+             case 10:
+            	 interpolar(boundary,indx,k-1,k,col_sentido,p,angle,Pint,N);
+            	 etq[0*col_sentido+ind_etq]=2;
+            	 etq[1*col_sentido+ind_etq]=Pint[0];
+            	 etq[2*col_sentido+ind_etq]=Pint[1];
+            	 ind_etq++; //incrementar indice del arreglo etq
+
+            	 //         %retroceder
+            	 k=k-1;
+            	 break;
+
+             case 12: // %punta
+            	 //%retroceder
+            	 k=k-1;
+            	 break;
+
+             case 13: // %cruce por cero
+            	 //%Accion
+            	 etq[0*col_sentido+ind_etq]=2;
+            	 etq[1*col_sentido+ind_etq]=boundary[0*N+indx[k-1]];
+            	 etq[2*col_sentido+ind_etq]=boundary[1*N+indx[k-1]];
+            	 ind_etq++; //incrementar indice del arreglo etq
+            	 break;
+
+             case 11:// %caso especial comienzo de segmento frontera
+            	 tmp[0] = boundary[0*N+indx[k]];
+            	 tmp[1] = boundary[1*N+indx[k]];
+            	 break;
+
+             case 15:
+            	 Pk1[0] = tmp[0]; Pk1[1]=tmp[1];
+				 Pk2[0] = boundary[0*N+indx[k-1]]; Pk2[1]=boundary[1*N+indx[k-1]];
+
+				 Pk1y = proyectY(Pk1[0],Pk1[1],angle);
+				 Pk2y = proyectY(Pk2[0],Pk2[1],angle);
+
+				 if(Pk1y>Pk2y)
+				 {
+					etq[0*col_sentido+ind_etq]=2;
+					etq[1*col_sentido+ind_etq]=Pk1[0];
+					etq[2*col_sentido+ind_etq]=Pk1[1];
+
+					etq[0*col_sentido+(ind_etq+1)]=3;
+					etq[1*col_sentido+(ind_etq+1)]=Pk1[0];
+					etq[2*col_sentido+(ind_etq+1)]=Pk1[1];
+
+					etq[0*col_sentido+(ind_etq+2)]=3;
+					etq[1*col_sentido+(ind_etq+2)]=Pk2[0];
+					etq[2*col_sentido+(ind_etq+2)]=Pk2[1];
+
+					etq[0*col_sentido+(ind_etq+3)]=2;
+					etq[1*col_sentido+(ind_etq+3)]=Pk2[0];
+					etq[2*col_sentido+(ind_etq+3)]=Pk2[1];
+				 }
+				 else
+				 {
+					etq[0*col_sentido+ind_etq]=2;
+					etq[1*col_sentido+ind_etq]=Pk2[0];
+					etq[2*col_sentido+ind_etq]=Pk2[1];
+
+					etq[0*col_sentido+(ind_etq+1)]=3;
+					etq[1*col_sentido+(ind_etq+1)]=Pk2[0];
+					etq[2*col_sentido+(ind_etq+1)]=Pk2[1];
+
+					etq[0*col_sentido+(ind_etq+2)]=3;
+					etq[1*col_sentido+(ind_etq+2)]=Pk1[0];
+					etq[2*col_sentido+(ind_etq+2)]=Pk1[1];
+
+					etq[0*col_sentido+(ind_etq+3)]=2;
+					etq[1*col_sentido+(ind_etq+3)]=Pk1[0];
+					etq[2*col_sentido+(ind_etq+3)]=Pk1[1];
+				 }
+				 ind_etq=ind_etq+4;
+				  //%retroseder
+				 k=k-1;
+				 break;
+
+             case 16:
+
+            	 Pk1[0] = tmp[0]; Pk1[1]=tmp[1];
+            	 Pk2[0] = boundary[0*N+indx[k-1]]; Pk2[1]=boundary[1*N+indx[k-1]];
+
+            	 Pk1y = proyectY(Pk1[0],Pk1[1],angle);
+            	 Pk2y = proyectY(Pk2[0],Pk2[1],angle);
+
+				 if(Pk1y>Pk2y)
+				 {
+					etq[0*col_sentido+ind_etq]=2;
+					etq[1*col_sentido+ind_etq]=Pk1[0];
+					etq[2*col_sentido+ind_etq]=Pk1[1];
+
+					etq[0*col_sentido+(ind_etq+1)]=3;
+					etq[1*col_sentido+(ind_etq+1)]=Pk1[0];
+					etq[2*col_sentido+(ind_etq+1)]=Pk1[1];
+
+					etq[0*col_sentido+(ind_etq+2)]=3;
+					etq[1*col_sentido+(ind_etq+2)]=Pk2[0];
+					etq[2*col_sentido+ind_etq+2]=Pk2[1];
+
+					etq[0*col_sentido+(ind_etq+3)]=1;
+					etq[1*col_sentido+(ind_etq+3)]=Pk2[0];
+					etq[2*col_sentido+(ind_etq+3)]=Pk2[1];
+				 }
+				 else
+				 {
+					etq[0*col_sentido+ind_etq]=1;
+					etq[1*col_sentido+ind_etq]=Pk2[0];
+					etq[2*col_sentido+ind_etq]=Pk2[1];
+
+					etq[0*col_sentido+(ind_etq+1)]=3;
+					etq[1*col_sentido+(ind_etq+1)]=Pk2[0];
+					etq[2*col_sentido+(ind_etq+1)]=Pk2[1];
+
+					etq[0*col_sentido+(ind_etq+2)]=3;
+					etq[1*col_sentido+(ind_etq+2)]=Pk1[0];
+					etq[2*col_sentido+(ind_etq+2)]=Pk1[1];
+
+					etq[0*col_sentido+(ind_etq+3)]=2;
+					etq[1*col_sentido+(ind_etq+3)]=Pk1[0];
+					etq[2*col_sentido+(ind_etq+3)]=Pk1[1];
+				 }
+				 ind_etq=ind_etq+4;
+				  //%retroseder
+				 k=k-1;
+				 break;
+
+             	 case 17: // %Caracter especial de terminacion
+                	 Pk1[0] = tmp[0]; Pk1[1]=tmp[1];
+                	 Pk2[0] = boundary[0*N+indx[k-1]]; Pk2[1]=boundary[1*N+indx[k-1]];
+
+                	 Pk1y = proyectY(Pk1[0],Pk1[1],angle);
+                	 Pk2y = proyectY(Pk2[0],Pk2[1],angle);
+
+    				 if(Pk1y>Pk2y)
+    				 {
+    					etq[0*col_sentido+ind_etq]=1;
+    					etq[1*col_sentido+ind_etq]=Pk1[0];
+    					etq[2*col_sentido+ind_etq]=Pk1[1];
+
+    					etq[0*col_sentido+(ind_etq+1)]=3;
+    					etq[1*col_sentido+(ind_etq+1)]=Pk1[0];
+    					etq[2*col_sentido+(ind_etq+1)]=Pk1[1];
+
+    					etq[0*col_sentido+(ind_etq+2)]=3;
+    					etq[1*col_sentido+(ind_etq+2)]=Pk2[0];
+    					etq[2*col_sentido+(ind_etq+2)]=Pk2[1];
+
+    					etq[0*col_sentido+(ind_etq+3)]=2;
+    					etq[1*col_sentido+(ind_etq+3)]=Pk2[0];
+    					etq[2*col_sentido+(ind_etq+3)]=Pk2[1];
+    				 }
+    				 else
+    				 {
+    					etq[0*col_sentido+ind_etq]=2;
+    					etq[1*col_sentido+ind_etq]=Pk2[0];
+    					etq[2*col_sentido+ind_etq]=Pk2[1];
+
+    					etq[0*col_sentido+(ind_etq+1)]=3;
+    					etq[1*col_sentido+(ind_etq+1)]=Pk2[0];
+    					etq[2*col_sentido+(ind_etq+1)]=Pk2[1];
+
+    					etq[0*col_sentido+(ind_etq+2)]=3;
+    					etq[1*col_sentido+(ind_etq+2)]=Pk1[0];
+    					etq[2*col_sentido+ind_etq+2]=Pk1[1];
+
+    					etq[0*col_sentido+ind_etq+3]=1;
+    					etq[1*col_sentido+ind_etq+3]=Pk1[0];
+    					etq[2*col_sentido+ind_etq+3]=Pk1[1];
+    				 }
+    				 ind_etq=ind_etq+4;
+    				  //%retroseder
+    				 k=k-1;
+    				 break;
+
+                case 18:
+                	break;
+                case 19:
+					 etq[0*col_sentido+ind_etq]=2;
+					 etq[1*col_sentido+ind_etq]=boundary[0*N+indx[k-1]];
+					 etq[2*col_sentido+ind_etq]=boundary[1*N+indx[k-1]];
+					 ind_etq++; //incrementar indice del arreglo etq
+					 break;
+          }// switch
+         k = k+1;
+	 }// while(k<=col_sentido)
+}// fin funcion crear list etq
+
+__device__ void orden(float *Etq,int cant_etq, float angle, int *arr_ord,int cant_indx)
+{
+
+	float*A=new float[cant_etq*2];
+
+
+
+	for (int i=0; i<cant_etq;i++)
+	{
+		A[i*2+0]=i;
+		A[i*2+1]=proyectY(Etq[1*cant_indx+i],Etq[2*cant_indx+i],angle);
+	}
+
+	int i, j, flag = 1;    // set flag to 1 to start first pass
+      float temp[2];             // holding variable
+
+      for(i = 1; (i <= cant_etq) && flag; i++)
+     {
+          flag = 0;
+          for (j=0; j < (cant_etq -1); j++)
+         {
+               if (A[(j+1)*2+1] < A[j*2+1])      // ascending order simply changes to <
+              {
+                    temp[0] = A[j*2+0];             // swap elements
+                    temp[1] = A[j*2+1];
+                    A[j*2+0] = A[(j+1)*2+0];
+                    A[j*2+1] = A[(j+1)*2+1];
+                    A[(j+1)*2+0] = temp[0];
+                    A[(j+1)*2+1] = temp[1];
+                    flag = 1;               // indicates that a swap occurred.
+               }
+         }
+     }
+
+	for (int i=0; i<cant_etq;i++)
+			arr_ord[i]=(int)A[i*2+0];
+
+
+
+}
+__global__ void kernel(float *SBorde,float *SProyX,float *SMap)
+{
+
+	int N=239,i,j;
+	const float PI = 3.1415927;
+	int inc_p=1, inc_phi=1; //estos valores deben cambiar a float para poner inc mas peque�os
+	int  cant_phi=361, cant_indx; //cantidades de sigmas, phi e indices de puntos que estan en la distancia estudiada
+    int p_dist, p_actual, phi_actual,  cant_etq;
+   						//banda: cantidad de puntos de borde a considerar para hallar el segmento
+    						//o sea, serian 5 por delante de la linea y 5 por detras
+    						//p_dist: distancia desde el origen, seria p+inc_sigma
+
+    float banda=10, phi_actual_rad, eps=0.000001, s, valortemp, Diam; //variables para procesamiento
+    int signo, j_ord, et1, et2; //j_ord lleva arreglo de orden, s acumula distancia
+
+    //variables de ciclo
+    float V1, V2;
+	float Sdif[239];
+	 int Sindx[239];
+	 int Ssentido[239];
+
+  phi_actual =  threadIdx.x + blockDim.x * blockIdx.x; 
+    if(phi_actual<361)
+    {
+
+      int p_dist=0;
+      phi_actual_rad=(phi_actual*PI)/180; //convierte a radian
+      while (true) // hacer hasta que no haya mas segmentos en ese angulo de la region
+		{
+		     p_actual=p_dist*inc_p;
+		     for (j=0; j<N; j++)
+                Sdif[j] = SProyX[phi_actual*N+j]-p_actual;
+             cant_indx=0;
+			 cant_etq=0;
+
+			 for (j=0; j<N; j++)
+			{ V1=(-banda/2.0)<Sdif[j];
+			  V2=Sdif[j]<(banda/2.0);
+			  if (V1 && V2) //si las distancias estan en ese rango de +-banda/2
+					{
+					  Sindx[cant_indx]=j;
+					  valortemp = Sdif[j]*(fabs(Sdif[j])>eps);
+					  signo=0;
+					  if (valortemp<0.0) signo=-1;
+					  else if (valortemp>0.0) signo=1;
+					  Ssentido[cant_indx]= 1+signo;
+					  cant_indx++;
+					}
+			}//for
+ 
+			float *SEtq=new float[3*cant_indx];
+			screateListEtq(Ssentido,SBorde,Sindx,cant_indx,phi_actual_rad,p_actual,SEtq,cant_etq);
+
+                if(cant_etq==0)
+				  break;
+          
+         int *arr_ord=new int[cant_etq];
+
+         orden(SEtq,cant_etq,phi_actual_rad,arr_ord,cant_indx);
+         j_ord=0; s = 0;
+         while (j_ord<cant_etq)
+			{
+				  //%Obteniend las etiquetas correspondientes a los posibles
+				  //     %segmentos interiores
+				  et1 = SEtq[0*cant_indx+arr_ord[j_ord]]; et2=  SEtq[0*cant_indx+arr_ord[j_ord+1]];
+				  if(((et1==3)&&(et2==3))||((et1==1)&&(et2==2)))
+				  {
+					  //%Obteniendo distancia de los puntos que determinan el segmento
+					  //scumulando en s
+					  s=s+sqrt(powf((SEtq[1*cant_indx+arr_ord[j_ord]]-SEtq[1*cant_indx+arr_ord[j_ord+1]]),2) + powf((SEtq[2*cant_indx+arr_ord[j_ord]]-SEtq[2*cant_indx+arr_ord[j_ord+1]]),2));
+					  j_ord = j_ord+1;
+			      }
+				  j_ord = j_ord+1;
+
+			}//while j_ord<cant_etq
+			 ///cout<<"valor s "<<s<<endl;
+			 p_dist = p_dist+1;
+			 SMap[p_actual*cant_phi+phi_actual]=s;
+
+	    }
+    }
+}
+
+
+int main() {
+
+        float elapsedTime;
+		cudaEvent_t start, stop;
+		cudaEventCreate(&start);
+		cudaEventCreate(&stop);
+	int N = 239; //tama�o del contorno
+	Matriz Borde; //Map: mapa de distancias, Etq: etiquetas de puntos para analisis de segmentos
+									//ProyX: proyecciones en X de todos los puntos del borde para todos los angulos
+	///float *dif; // vector de diferencias en cada punto segun la distancia analizada en el momeonto
+
+
+	///int *indx, *sentido, *arr_ord; //arreglos para obtener distancias hasta el origen de cada linea en la region
+	int inc_p=1, inc_phi=1; //estos valores deben cambiar a float para poner inc mas peque�os
+	int  cant_phi, cant_indx; //cantidades de sigmas, phi e indices de puntos que estan en la distancia estudiada
+    int p_dist, p_actual, phi_actual,  cant_etq;
+   						//banda: cantidad de puntos de borde a considerar para hallar el segmento
+    						//o sea, serian 5 por delante de la linea y 5 por detras
+    						//p_dist: distancia desde el origen, seria p+inc_sigma
+
+    float banda=10, phi_actual_rad, eps=0.000001, s, valortemp, Diam; //variables para procesamiento
+    int signo, j_ord, et1, et2; //j_ord lleva arreglo de orden, s acumula distancia
+
+    //variables de ciclo
+    int i,j; float V1, V2;
+
+   // leer el borde de la forma a analizar
+
+	Borde = (float **)malloc(2*sizeof(float*));
+	for (i=0;i<2;i++)
+		Borde[i] = (float*)malloc(N*sizeof(float));
+
+	//leer un array de matlab
+     std::ifstream infileX, infileY;
+
+     infileX.open("C:/Users/Pavel/Desktop/tesis/OK/03/x.bin", std::ifstream::binary|std::ifstream::binary);//| std::ifstream::binary
+    infileY.open("C:/Users/Pavel/Desktop/tesis/OK/03/y.bin", std::ifstream::binary|std::ifstream::binary);//| std::ifstream::binary
+
+    infileX.read((char*)Borde[0], N*sizeof(float));
+    infileY.read((char*)Borde[1], N*sizeof(float));
+    infileX.close();
+    infileY.close();
+
+
+
+
+    float *SBorde=new float[N*2];
+     float *aSBorde;
+
+    for(int i=0;i<2;i++)
+        for(int j=0;j<N;j++)
+           SBorde[i*N+j]=Borde[i][j];
+
+
+		   for(int i=0;i<N*2;i++)
+		   {
+                if(i<N)
+				SBorde[i]=SBorde[i]-42.7141119221411;
+				else  if(i>=N)SBorde[i]=SBorde[i]-38.6918085969181;		   
+		   }
+
+             float SDiam=Sdiametro(SBorde,N);
+
+              cant_phi=ceil(361/inc_phi); //como inc es 1, es 360
+              int cant_p=ceil((SDiam/2));
+			  
+
+
+        
+         
+         float *cSMap;
+         
+        float *SMap2=new float[cant_p*cant_phi];
+         for(int k=0;k<cant_p*cant_phi;k++)
+            SMap2[k]=0;
+
+            
+
+
+       float *SProyX=new float[N*cant_phi];
+       float *bSProyX;
+       SproyectX(SBorde,N,cant_phi,SProyX);
+	   
+
+        int ang=360;
+
+
+        
+
+    
+    cudaMalloc( (void**)&aSBorde, 2*N * sizeof(float) );
+    cudaMalloc( (void**)&bSProyX, cant_phi*N*sizeof(float) );
+    cudaMalloc( (void**)&cSMap, cant_p*cant_phi * sizeof(float) );
+
+    cudaMemcpy( aSBorde,SBorde, 2*N * sizeof(float),cudaMemcpyHostToDevice ); 
+    cudaMemcpy( bSProyX,SProyX, cant_phi*N*sizeof(float),cudaMemcpyHostToDevice ); 
+    
+	cudaEventRecord(start, 0);
+    kernel<<<91,4>>>(aSBorde,bSProyX,cSMap);
+	cudaEventRecord(stop, 0);
+		cudaEventSynchronize(stop);
+		cudaEventElapsedTime(&elapsedTime, start, stop);
+		
+		
+
+    cudaMemcpy( SMap2,cSMap,cant_p*cant_phi*sizeof(float),cudaMemcpyDeviceToHost );
+
+  impresion(SMap2,cant_p,cant_phi);
+  cout<<endl;
+  cout<<"Map[ "<<cant_p<<" ][ "<<cant_phi<<" ]"<<endl;
+  cout << "tiempo de ejecucion en la GPU :" << elapsedTime/1000 <<" segundos"<<endl;
+  cout<<"Diametro: "<<SDiam<<endl;
+  
+
+cudaFree(aSBorde);
+cudaFree(bSProyX);
+cudaFree(cSMap);
+FILE *in = fopen("F:/0ok.txt", "wt");
+fwrite(SMap2, sizeof(float), 32*361,in);
+fclose(in);
+return 0;
+}    
+   
+ 
