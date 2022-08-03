@@ -1,1 +1,1 @@
-# croftondescriptor
+# croftondescriptor CUDA C++
