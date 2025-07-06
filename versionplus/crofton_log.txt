@@ -1,0 +1,12 @@
+Diametro calculado: 512.601
+SMap dimension: 257 x 361
+Primeros valores de SMap: 0 0 0 0 0 0 0 0 0 0 
+-------------------------------------
+Diametro calculado: 942.308
+SMap dimension: 472 x 361
+Primeros valores de SMap: 0 0 0 0 0 0 0 0 0 0 
+-------------------------------------
+Diametro calculado: 512.601
+SMap dimension: 257 x 361
+Primeros valores de SMap: 0 0 0 0 0 0 0 0 0 0 
+-------------------------------------
