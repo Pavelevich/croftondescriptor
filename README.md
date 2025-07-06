@@ -1,7 +1,8 @@
 # Crofton Descriptor CUDA C++
 
 A **fast, GPU‑accelerated implementation** of the Crofton shape descriptor for binary images.  The Crofton descriptor measures the *average boundary length per unit area* and is widely used in morphology‑based shape analysis, object recognition, and medical‑image classification.
-![Uploading image.png…]()
+![image](https://github.com/user-attachments/assets/9b9a167b-77d8-4f6b-aefb-e442ba6ba28d)
+
 
 
 ---
