@@ -1,0 +1,68 @@
+cmake_minimum_required(VERSION 3.16)
+project(CroftonSimple)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Try to find OpenCV
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(OpenCV QUIET opencv4)
+endif()
+
+if(NOT OpenCV_FOUND)
+    # Try alternative paths for OpenCV
+    find_path(OpenCV_INCLUDE_DIRS
+        NAMES opencv2/opencv.hpp
+        PATHS 
+            /opt/homebrew/include
+            /usr/local/include
+            /opt/local/include
+        NO_DEFAULT_PATH)
+    
+    find_library(OpenCV_LIBS
+        NAMES opencv_core opencv_imgproc opencv_imgcodecs opencv_highgui
+        PATHS
+            /opt/homebrew/lib
+            /usr/local/lib
+            /opt/local/lib
+        NO_DEFAULT_PATH)
+        
+    if(OpenCV_INCLUDE_DIRS AND OpenCV_LIBS)
+        set(OpenCV_FOUND TRUE)
+        message(STATUS "Found OpenCV manually: ${OpenCV_INCLUDE_DIRS}")
+    endif()
+endif()
+
+if(NOT OpenCV_FOUND)
+    message(STATUS "OpenCV not found, trying to use system python opencv...")
+    # For demonstration purposes, we'll try to continue
+    # In a real scenario, you might want to use Python bindings
+    set(OpenCV_INCLUDE_DIRS "/usr/local/include")
+    set(OpenCV_LIBS "")
+endif()
+
+# Add executable
+add_executable(crofton_simple main_simple.cpp)
+
+# Include directories
+if(OpenCV_INCLUDE_DIRS)
+    target_include_directories(crofton_simple PRIVATE ${OpenCV_INCLUDE_DIRS})
+endif()
+
+# Link libraries
+if(OpenCV_LIBS)
+    target_link_libraries(crofton_simple ${OpenCV_LIBS})
+endif()
+
+# Compiler-specific options for Apple Silicon optimization
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
+    target_compile_options(crofton_simple PRIVATE -mcpu=apple-m1 -O3)
+    message(STATUS "Compiling for Apple Silicon (ARM64)")
+else()
+    message(STATUS "Compiling for x86_64")
+    target_compile_options(crofton_simple PRIVATE -O3 -march=native)
+endif()
+
+# Build configuration
+set(CMAKE_BUILD_TYPE Release)
