@@ -1,0 +1,4 @@
+/Users/pchmirenko/Desktop/croftondescriptor/apple_silicon_version/build_metal/CMakeFiles/crofton_simple.dir
+/Users/pchmirenko/Desktop/croftondescriptor/apple_silicon_version/build_metal/CMakeFiles/crofton_metal.dir
+/Users/pchmirenko/Desktop/croftondescriptor/apple_silicon_version/build_metal/CMakeFiles/edit_cache.dir
+/Users/pchmirenko/Desktop/croftondescriptor/apple_silicon_version/build_metal/CMakeFiles/rebuild_cache.dir
