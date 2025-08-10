@@ -82,7 +82,7 @@ Start both backend and frontend:
 # Terminal 1: Start Flask backend
 python3 edge_detection_gui.py
 
-# Terminal 2: Start React frontend (in another terminal)
+# Terminal 2: Start React frontend
 cd image-shape-explorer
 npm run dev
 ```
