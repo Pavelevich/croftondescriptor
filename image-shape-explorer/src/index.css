@@ -1,0 +1,182 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* Apple-inspired neutral base */
+    --background: 0 0% 100%;
+    --foreground: 215 25% 27%;
+
+    /* Clean card system */
+    --card: 0 0% 100%;
+    --card-foreground: 215 25% 27%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 25% 27%;
+
+    /* Blue accent system */
+    --primary: 210 100% 54%;
+    --primary-foreground: 0 0% 100%;
+    --primary-muted: 210 100% 95%;
+
+    /* Subtle secondary system */
+    --secondary: 215 20% 97%;
+    --secondary-foreground: 215 25% 27%;
+
+    /* Muted backgrounds */
+    --muted: 215 20% 97%;
+    --muted-foreground: 215 15% 57%;
+
+    /* Accent colors */
+    --accent: 215 20% 97%;
+    --accent-foreground: 215 25% 27%;
+
+    /* Status colors */
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 142 69% 58%;
+    --success-foreground: 0 0% 100%;
+    --warning: 35 92% 62%;
+    --warning-foreground: 0 0% 100%;
+
+    /* Border and input */
+    --border: 215 20% 90%;
+    --input: 215 20% 90%;
+    --ring: 210 100% 54%;
+
+    /* Shadows and effects */
+    --shadow-light: 215 25% 27% / 0.04;
+    --shadow-medium: 215 25% 27% / 0.08;
+    --shadow-heavy: 215 25% 27% / 0.16;
+    
+    /* Border radius */
+    --radius: 0.75rem;
+
+    --sidebar-background: 0 0% 98%;
+
+    --sidebar-foreground: 240 5.3% 26.1%;
+
+    --sidebar-primary: 240 5.9% 10%;
+
+    --sidebar-primary-foreground: 0 0% 98%;
+
+    --sidebar-accent: 240 4.8% 95.9%;
+
+    --sidebar-accent-foreground: 240 5.9% 10%;
+
+    --sidebar-border: 220 13% 91%;
+
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    /* Dark apple-inspired base */
+    --background: 215 28% 9%;
+    --foreground: 215 15% 95%;
+
+    /* Dark card system */
+    --card: 215 28% 11%;
+    --card-foreground: 215 15% 95%;
+
+    --popover: 215 28% 11%;
+    --popover-foreground: 215 15% 95%;
+
+    /* Dark blue accent */
+    --primary: 210 100% 64%;
+    --primary-foreground: 215 28% 9%;
+    --primary-muted: 210 100% 15%;
+
+    /* Dark secondary */
+    --secondary: 215 28% 15%;
+    --secondary-foreground: 215 15% 95%;
+
+    /* Dark muted */
+    --muted: 215 28% 15%;
+    --muted-foreground: 215 15% 65%;
+
+    /* Dark accent */
+    --accent: 215 28% 15%;
+    --accent-foreground: 215 15% 95%;
+
+    /* Dark status colors */
+    --destructive: 0 72% 61%;
+    --destructive-foreground: 215 28% 9%;
+    --success: 142 69% 68%;
+    --success-foreground: 215 28% 9%;
+    --warning: 35 92% 72%;
+    --warning-foreground: 215 28% 9%;
+
+    /* Dark borders */
+    --border: 215 28% 20%;
+    --input: 215 28% 20%;
+    --ring: 210 100% 64%;
+
+    /* Dark shadows */
+    --shadow-light: 0 0% 0% / 0.1;
+    --shadow-medium: 0 0% 0% / 0.2;
+    --shadow-heavy: 0 0% 0% / 0.4;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  }
+
+  /* Custom scrollbar for webkit browsers */
+  ::-webkit-scrollbar {
+    @apply w-2;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/30;
+  }
+}
+
+@layer components {
+  /* Custom glass effect */
+  .glass {
+    backdrop-filter: blur(12px);
+    background: hsl(var(--background) / 0.8);
+    border: 1px solid hsl(var(--border) / 0.5);
+  }
+
+  /* Custom shadows */
+  .shadow-soft {
+    box-shadow: 0 2px 16px hsl(var(--shadow-light));
+  }
+
+  .shadow-medium {
+    box-shadow: 0 4px 24px hsl(var(--shadow-medium));
+  }
+
+  .shadow-heavy {
+    box-shadow: 0 8px 32px hsl(var(--shadow-heavy));
+  }
+}
