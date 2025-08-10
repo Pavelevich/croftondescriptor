@@ -2,6 +2,14 @@
 
 This repository implements a reproducible pipeline for detecting **outer cell boundaries** in stained microscopy images and characterizing their geometry with a **Crofton-based descriptor**. Two GPU backends are provided: **CUDA** (NVIDIA) and **Metal** (Apple Silicon). The system supports **n-pass iterative refinement** with parameter scheduling and quantitative model selection.
 
+<table>
+  <tr>
+    <td><img src="https://github.com/user-attachments/assets/5df481ac-0123-4a0e-a390-245f1bb1b950" width="100%"></td>
+    <td><img src="https://github.com/user-attachments/assets/ce4535cd-b4da-4295-91ce-426e5beb9182" width="100%"></td>
+  </tr>
+</table>
+
+
 ---
 
 ## 1. Problem Definition
