@@ -1,14 +1,14 @@
 import React, { useEffect, useRef } from 'react';
 import { Play, Image as ImageIcon, Beaker } from 'lucide-react';
-import { Button } from '@/components/ui/button.tsx';
-import { Card } from '@/components/ui/card.tsx';
-import { Badge } from '@/components/ui/badge.tsx';
-import { Dropzone } from '@/components/Dropzone.tsx';
-import { PanelParams } from '@/components/PanelParams.tsx';
-import { ResultCard } from '@/components/ResultCard.tsx';
-import { MetricsPanel } from '@/components/MetricsPanel.tsx';
-import { useAppStore } from '@/lib/store.ts';
-import { useToast } from '@/hooks/use-toast.ts';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Dropzone } from '@/components/Dropzone';
+import { PanelParams } from '@/components/PanelParams';
+import { ResultCard } from '@/components/ResultCard';
+import { MetricsPanel } from '@/components/MetricsPanel';
+import { useAppStore } from '@/lib/store';
+import { useToast } from '@/hooks/use-toast';
 
 const Index = () => {
   const workerRef = useRef<Worker | null>(null);
