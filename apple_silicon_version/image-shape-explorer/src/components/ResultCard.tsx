@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Download, Maximize2, X } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card.tsx';
-import { Button } from '@/components/ui/button.tsx';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog.tsx';
-import { Badge } from '@/components/ui/badge.tsx';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
 
 interface ResultCardProps {
   title: string;

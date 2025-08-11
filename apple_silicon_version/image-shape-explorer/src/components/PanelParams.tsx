@@ -1,14 +1,14 @@
 import React from 'react';
 import { RotateCcw, HelpCircle } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.tsx';
-import { Button } from '@/components/ui/button.tsx';
-import { Label } from '@/components/ui/label.tsx';
-import { Slider } from '@/components/ui/slider.tsx';
-import { Switch } from '@/components/ui/switch.tsx';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select.tsx';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip.tsx';
-import { Separator } from '@/components/ui/separator.tsx';
-import { useAppStore } from '@/lib/store.ts';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Slider } from '@/components/ui/slider';
+import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Separator } from '@/components/ui/separator';
+import { useAppStore } from '@/lib/store';
 
 export const PanelParams: React.FC = () => {
   const { params, setParams, resetParams } = useAppStore();
