@@ -58,12 +58,14 @@ class EnhancedEdgeDetector:
         
         return closed, mask_hsv, bin_tophat, combined, opened
 
-def test_algorithm():
+def test_algorithm(image_path=None, output_dir=None):
     print("Testing Corrected CUDA-Replicated Algorithm")
     print("==========================================")
     
-    # Load the test image
-    image_path = "/Users/pchmirenko/Desktop/croftondescriptor/apple_silicon_version/test_cell.jpg"
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    image_path = image_path or os.path.join(base_dir, "test_cell.jpg")
+    output_dir = output_dir or base_dir
+    os.makedirs(output_dir, exist_ok=True)
     
     if not os.path.exists(image_path):
         print(f"Error: Test image not found at {image_path}")
@@ -130,24 +132,24 @@ def test_algorithm():
     print("\nSaving results...")
     
     # Original image
-    cv2.imwrite("/Users/pchmirenko/Desktop/croftondescriptor/apple_silicon_version/debug_original.jpg", image)
+    cv2.imwrite(os.path.join(output_dir, "debug_original.jpg"), image)
     
     # HSV mask
-    cv2.imwrite("/Users/pchmirenko/Desktop/croftondescriptor/apple_silicon_version/debug_hsv_mask.jpg", mask_hsv)
+    cv2.imwrite(os.path.join(output_dir, "debug_hsv_mask.jpg"), mask_hsv)
     
     # Top-hat
-    cv2.imwrite("/Users/pchmirenko/Desktop/croftondescriptor/apple_silicon_version/debug_tophat.jpg", bin_tophat)
+    cv2.imwrite(os.path.join(output_dir, "debug_tophat.jpg"), bin_tophat)
     
     # Combined
-    cv2.imwrite("/Users/pchmirenko/Desktop/croftondescriptor/apple_silicon_version/debug_combined.jpg", combined)
+    cv2.imwrite(os.path.join(output_dir, "debug_combined.jpg"), combined)
     
     # After morphology
-    cv2.imwrite("/Users/pchmirenko/Desktop/croftondescriptor/apple_silicon_version/debug_preprocessed.jpg", preprocessed)
+    cv2.imwrite(os.path.join(output_dir, "debug_preprocessed.jpg"), preprocessed)
     
     # Final result with contour
     result_image = image.copy()
     cv2.drawContours(result_image, contours, largest_idx, (0, 255, 0), 2)
-    cv2.imwrite("/Users/pchmirenko/Desktop/croftondescriptor/apple_silicon_version/debug_final_result.jpg", result_image)
+    cv2.imwrite(os.path.join(output_dir, "debug_final_result.jpg"), result_image)
     
     print("Debug images saved:")
     print("- debug_original.jpg")
@@ -171,4 +173,6 @@ def test_algorithm():
     print("The corrected algorithm now follows the exact CUDA approach.")
 
 if __name__ == "__main__":
-    test_algorithm()
+    image_arg = sys.argv[1] if len(sys.argv) > 1 else None
+    output_arg = sys.argv[2] if len(sys.argv) > 2 else None
+    test_algorithm(image_arg, output_arg)

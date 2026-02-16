@@ -43,15 +43,6 @@ add_custom_target(CompileMetalShaders ALL
     DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/image_processing.metallib
 )
 
-# Copy metallib to build directory for runtime loading
-add_custom_command(
-    TARGET CompileMetalShaders POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy
-        ${CMAKE_CURRENT_BINARY_DIR}/image_processing.metallib
-        ${CMAKE_CURRENT_BINARY_DIR}/image_processing.metallib
-    COMMENT "Copying metallib to build directory"
-)
-
 # ============================================================================
 # EXECUTABLES
 # ============================================================================
@@ -123,7 +114,9 @@ endif()
 # BUILD CONFIGURATION
 # ============================================================================
 
-set(CMAKE_BUILD_TYPE Release)
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
 
 # Enable LTO (Link Time Optimization) for release builds
 if(CMAKE_BUILD_TYPE STREQUAL "Release")

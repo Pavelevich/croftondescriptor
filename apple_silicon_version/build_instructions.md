@@ -22,22 +22,13 @@ cmake --version
 
 ### 1. Navegar al directorio
 ```bash
-cd /Users/pchmirenko/Desktop/croftondescriptor/apple_silicon_version
+cd /ruta/a/croftondescriptor/apple_silicon_version
 ```
 
-### 2. Crear directorio de build
+### 2. Configurar y compilar
 ```bash
-mkdir -p build && cd build
-```
-
-### 3. Configurar CMake
-```bash
-cmake ..
-```
-
-### 4. Compilar
-```bash
-make -j$(sysctl -n hw.ncpu)
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
 ```
 
 ## Solución de Problemas Comunes
@@ -73,21 +64,16 @@ sudo xcode-select --reset
 
 ## Ejecución
 
-### 1. Preparar imagen de prueba
-- Coloca tu imagen en el directorio del proyecto
-- Modifica la línea 215 en `main.mm`:
-```cpp
-Mat imgColor = imread("tu_imagen.jpg");
-```
-
-### 2. Ejecutar
+### 1. Ejecutar (elige un target)
 ```bash
-./crofton_apple_silicon
+./build/crofton_simple tu_imagen.jpg simple_crofton_result.txt
+./build/crofton_metal tu_imagen.jpg metal_crofton_result.txt
+./build/crofton_optimized tu_imagen.jpg metal_optimized_result.txt
 ```
 
-### 3. Verificar salida
+### 2. Verificar salida
 - Se abrirán ventanas mostrando cada paso del procesamiento
-- El archivo `apple_silicon_crofton_result.txt` contendrá los resultados
+- Se generará el archivo de salida indicado por parámetro
 
 ## Optimizaciones de Rendimiento
 
@@ -107,7 +93,7 @@ uname -m  # Debería mostrar 'arm64' en Apple Silicon
 
 Para comparar rendimiento con la versión CUDA original:
 ```bash
-time ./crofton_apple_silicon
+time ./build/crofton_optimized tu_imagen.jpg metal_optimized_result.txt
 ```
 
 El rendimiento esperado en Apple Silicon es significativamente mejor para operaciones de procesamiento de imágenes debido a la arquitectura unificada de memoria.

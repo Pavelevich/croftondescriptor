@@ -1,7 +1,8 @@
 // Metal-accelerated backend worker for Crofton Descriptor
 // This worker connects to our Flask backend with Metal GPU acceleration
 
-let backendUrl = 'http://localhost:65060'; // Our Flask server (auto-discovered)
+const configuredBackendUrl = import.meta.env.VITE_CROFTON_BACKEND_URL?.trim();
+let backendUrl = configuredBackendUrl || 'http://localhost:65060';
 
 // Initialize connection to Metal backend
 const initMetalBackend = (): Promise<any> => {
@@ -18,7 +19,7 @@ const initMetalBackend = (): Promise<any> => {
       }
     } catch (error) {
       // Try to find the backend on different ports
-      const ports = [65060, 64562, 64317, 63432, 63362, 63215, 60277, 59698, 59210, 58902, 59034, 5000];
+      const ports = configuredBackendUrl ? [] : [65060, 5000];
       let found = false;
       
       for (const port of ports) {

@@ -207,14 +207,16 @@ void croftonDescriptorGPU(const vector<float> &contourData) {
 // ----------------------------------------------------
 // 5) MAIN with logs + partial “fix”: Top-Hat in grayscale + HSV mask
 // ----------------------------------------------------
-int main() {
+int main(int argc, char** argv) {
     // Reflection on 5–7 potential issues:
     // (listed above), we suspect we need a top-hat for the faint ring.
 
+    string imagePath = argc > 1 ? argv[1] : "test_cell.jpg";
+
     // 1) Load color image
-    Mat imgColor = imread("/home/pavel/Downloads/Telegram Desktop/photo_2025-03-16_19-35-40.jpg");
+    Mat imgColor = imread(imagePath);
     if(imgColor.empty()){
-        cerr << "Error: No se pudo cargar la imagen.\n";
+        cerr << "Error: No se pudo cargar la imagen: " << imagePath << "\n";
         return -1;
     }
     imshow("Imagen Original", imgColor);

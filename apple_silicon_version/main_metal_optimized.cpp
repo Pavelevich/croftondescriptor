@@ -95,7 +95,7 @@ int main(int argc, char** argv) {
     cout << endl;
 
     // Parse command line arguments
-    string imagePath = argc > 1 ? argv[1] : "/Users/pchmirenko/Desktop/croftondescriptor/apple_silicon_version/test_cell.jpg";
+    string imagePath = argc > 1 ? argv[1] : "test_cell.jpg";
     string outputPath = argc > 2 ? argv[2] : "metal_optimized_result.txt";
 
     // Check Metal availability

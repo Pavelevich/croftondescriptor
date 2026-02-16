@@ -183,14 +183,17 @@ vector<float> computeCroftonDescriptor(const vector<float>& contourData) {
     return descriptor;
 }
 
-int main() {
+int main(int argc, char** argv) {
     cout << "Apple Silicon Enhanced Edge Detection - Simple Version" << endl;
     cout << "=====================================================" << endl;
+
+    string imagePath = argc > 1 ? argv[1] : "test_cell.jpg";
+    string outputPath = argc > 2 ? argv[2] : "simple_crofton_result.txt";
     
     // Load image
-    Mat imgColor = imread("/Users/pchmirenko/Desktop/croftondescriptor/apple_silicon_version/test_cell.jpg");
+    Mat imgColor = imread(imagePath);
     if (imgColor.empty()) {
-        cerr << "Error: Could not load image" << endl;
+        cerr << "Error: Could not load image: " << imagePath << endl;
         return -1;
     }
     
@@ -277,7 +280,7 @@ int main() {
     cout << endl;
     
     // Save results to file
-    ofstream outFile("/Users/pchmirenko/Desktop/croftondescriptor/apple_silicon_version/simple_crofton_result.txt");
+    ofstream outFile(outputPath);
     if (outFile.is_open()) {
         outFile << "Apple Silicon Enhanced Edge Detection - Simple Version Results\n";
         outFile << "============================================================\n";
@@ -295,7 +298,7 @@ int main() {
             outFile << "Angle " << i << ": " << descriptor[i] << "\n";
         }
         outFile.close();
-        cout << "\nResults saved to simple_crofton_result.txt" << endl;
+        cout << "\nResults saved to " << outputPath << endl;
     }
     
     cout << "\nEnhanced edge detection completed successfully!" << endl;
