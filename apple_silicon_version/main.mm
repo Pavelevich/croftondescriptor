@@ -380,7 +380,9 @@ Mat enhancedPreprocessing(const Mat& inputImage) {
     return closed;
 }
 
-int main() {
+int main(int argc, char** argv) {
+    string imagePath = argc > 1 ? argv[1] : "test_cell.jpg";
+
     // Initialize Metal detector
     MetalEdgeDetector* detector = [[MetalEdgeDetector alloc] init];
     if (!detector) {
@@ -389,9 +391,9 @@ int main() {
     }
     
     // Load image
-    Mat imgColor = imread("/Users/pchmirenko/Desktop/croftondescriptor/apple_silicon_version/test_cell.jpg");
+    Mat imgColor = imread(imagePath);
     if (imgColor.empty()) {
-        cerr << "Error: Could not load image" << endl;
+        cerr << "Error: Could not load image: " << imagePath << endl;
         return -1;
     }
     

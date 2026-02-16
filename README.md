@@ -114,8 +114,8 @@ This objective empirically correlates with visually clean, single-shell outer bo
 ### 6.2 CUDA (Linux/Windows)
 
 ```bash
-git clone https://example.com/crofton.git
-cd crofton/cuda
+git clone https://github.com/Pavelevich/croftondescriptor.git
+cd croftondescriptor/cuda_version
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 
@@ -127,12 +127,12 @@ cmake --build build -j
 
 ```bash
 brew install cmake opencv
-cd crofton/metal
+cd croftondescriptor/apple_silicon_version
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 
 # CLI demo
-./build/crofton_metal --image path/to/cell.jpg --passes 10 --export contour.csv
+./build/crofton_optimized test_cell.jpg metal_optimized_result.txt
 ```
 
 ### 6.4 Optional web viewer (macOS/Linux)
@@ -140,6 +140,7 @@ cmake --build build -j
 ```bash
 # Backend (Flask)
 pip install flask flask-cors opencv-python numpy pillow
+cd apple_silicon_version
 python edge_detection_gui.py
 
 # Frontend (React)
@@ -192,7 +193,7 @@ If this work is useful in your research, please cite:
   title = {Crofton-Based Cell Boundary Detection with CUDA and Metal},
   year  = {2025},
   author= {Pavel Chmirenko et al.},
-  url   = {https://example.com/crofton},
+  url   = {https://github.com/Pavelevich/croftondescriptor},
   note  = {GPU-accelerated iterative segmentation and Crofton analysis}
 }
 ```

@@ -201,11 +201,13 @@ void analyzeDescriptorDifferences(const vector<float>& original,
          << "%" << endl;
 }
 
-int main() {
+int main(int argc, char** argv) {
     cout << "Apple Silicon Enhanced Crofton Descriptor Demonstration" << endl;
     cout << "=======================================================" << endl;
     cout << "Comparing Original CUDA vs Enhanced Apple Silicon algorithms" << endl;
     cout << endl;
+
+    string outputPath = argc > 1 ? argv[1] : "algorithm_comparison.txt";
     
     // Generate synthetic cell boundary
     cout << "1. Generating synthetic cell boundary..." << endl;
@@ -239,7 +241,7 @@ int main() {
     
     // Save results
     cout << "\n4. Saving results..." << endl;
-    ofstream resultFile("/Users/pchmirenko/Desktop/croftondescriptor/apple_silicon_version/algorithm_comparison.txt");
+    ofstream resultFile(outputPath);
     if (resultFile.is_open()) {
         resultFile << "Apple Silicon Enhanced Crofton Descriptor - Algorithm Comparison\n";
         resultFile << "================================================================\n\n";
@@ -269,7 +271,7 @@ int main() {
         }
         
         resultFile.close();
-        cout << "Results saved to algorithm_comparison.txt" << endl;
+        cout << "Results saved to " << outputPath << endl;
     }
     
     // Summary of improvements

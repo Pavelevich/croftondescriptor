@@ -117,16 +117,19 @@ vector<Point> resampleContour(const vector<Point>& contour, int nPoints) {
     return resampled;
 }
 
-int main() {
+int main(int argc, char** argv) {
     cout << "Apple Silicon Metal-Accelerated Edge Detection + Crofton Descriptor" << endl;
     cout << "=====================================================================" << endl;
     cout << "GPU-Accelerated version with Metal compute shaders" << endl;
     cout << endl;
+
+    string imagePath = argc > 1 ? argv[1] : "test_cell.jpg";
+    string outputPath = argc > 2 ? argv[2] : "metal_crofton_result.txt";
     
     // Load test image
-    Mat imgColor = imread("/Users/pchmirenko/Desktop/croftondescriptor/apple_silicon_version/test_cell.jpg");
+    Mat imgColor = imread(imagePath);
     if (imgColor.empty()) {
-        cerr << "Error: Could not load test image" << endl;
+        cerr << "Error: Could not load test image: " << imagePath << endl;
         return -1;
     }
     
@@ -262,7 +265,7 @@ int main() {
     
     // Save results to file
     cout << "\n💾 Saving results..." << endl;
-    ofstream outFile("/Users/pchmirenko/Desktop/croftondescriptor/apple_silicon_version/metal_crofton_result.txt");
+    ofstream outFile(outputPath);
     if (outFile.is_open()) {
         outFile << "Apple Silicon Metal-Accelerated Crofton Descriptor Results\n";
         outFile << "========================================================\n";
@@ -293,7 +296,7 @@ int main() {
             outFile << "Angle " << i << ": " << descriptor[i] << "\n";
         }
         outFile.close();
-        cout << "Results saved to metal_crofton_result.txt" << endl;
+        cout << "Results saved to " << outputPath << endl;
     }
     
     cout << "\nMetal-accelerated edge detection completed successfully!" << endl;
