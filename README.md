@@ -12,6 +12,33 @@ This repository implements a reproducible pipeline for detecting **outer cell bo
 
 ---
 
+## What's new — GPU web app, cell classification & disease screening
+
+The CUDA backend now ships a full pipeline and web GUI that turns a blood-smear
+photo into per-cell shape classification and **decision-support disease
+screening**, all accelerated on an NVIDIA GPU. See
+[`cuda_version/README.md`](cuda_version/README.md) for setup and usage.
+
+- **Real CUDA Crofton kernels** ([`cuda_version/crofton_kernels.cu`](cuda_version/crofton_kernels.cu)) —
+  the previously-empty kernel is implemented as the classical line–polygon vote
+  map; compiled by `nvcc` (native) and by NVRTC via CuPy (web app), and runs on
+  Blackwell / RTX 50xx (`sm_120`).
+- **Web app** ([`cuda_version/webapp/`](cuda_version/webapp/)) — upload or pick a
+  sample, see the Crofton signature C(φ), multi-cell segmentation, a
+  rotation/scale-invariant **Crofton-FFT** descriptor, RandomForest
+  classification, a One-Class-SVM **anomaly** flag, and a **suspected-conditions**
+  card (sickle cell, elliptocytosis, MAHA, thalassemia/iron-deficiency,
+  myelofibrosis) with confirmatory tests and sources. Live model selector
+  (Chula-12 / sickle-3 / synthetic).
+- **Experiments** ([`cuda_version/results/`](cuda_version/results/)) — Crofton-FFT
+  beats Hu-moments, a raw-signature ablation, and a CNN on shape-defined classes
+  (**89%** on erythrocytesIDB), with rotation-invariance and per-condition
+  sensitivity figures. See [`cuda_version/CLASSIFICATION_PLAN.md`](cuda_version/CLASSIFICATION_PLAN.md).
+
+> Research / screening decision-support only — **not** a clinical diagnostic.
+
+---
+
 ## 1. Problem Definition
 
 Given a color micrograph \(I \in \mathbb{R}^{H\times W\times 3}\) containing a single stained cell on a nearly uniform background, we seek the **outer boundary** \(\Gamma\) of the cell such that:

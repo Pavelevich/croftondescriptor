@@ -1,358 +1,272 @@
 #include <opencv2/opencv.hpp>
 #include <cuda_runtime.h>
-#include <device_launch_parameters.h>
 #include <iostream>
 #include <fstream>
 #include <vector>
 #include <cmath>
-#include <cstdio>
-#include <cstdlib>
 #include <cstring>
+#include <string>
 #include <algorithm>
 
-// --------------------------------------------------------------------------------
-// Reflection on 5–7 Potential Sources of Error for Missing the Outer Transparent Edge:
-//
-// 1) HSV color range might be too narrow or the outer ring is nearly background hue.
-// 2) Morphological operations might remove that faint boundary if it's too small.
-// 3) The boundingRect + centering might cause offset issues if the contour is noisy.
-// 4) The shape's lighting or background might require top-hat or alternative approach
-//    specifically for faint transitions (semi-transparent edges).
-// 5) BANDA in kernelCrofton could be too small if the diameter is large, leading to 0 in SMap.
-// 6) We might need multi-scale or difference-of-Gaussians in grayscale to see faint edges.
-// 7) The outer region might not have enough saturation or value to appear in the HSV mask.
-//
-// Distilled to 1–2 Likely Issues:
-// A) The outer ring is almost the same color as the background, so HSV alone misses it.
-// B) A top-hat transform on grayscale could highlight that faint ring more effectively.
-//
-// Logs to validate assumptions:
-//  - Pixel counts in the top-hat result, plus morphological steps
-//  - Average HSV in the largest contour (to see if it’s near background hue/sat).
-//
-// Then we attempt a new partial fix:
-//  - Apply top-hat in grayscale to highlight faint boundaries
-//  - Combine that top-hat result with the widened HSV mask (logical OR)
-//  - Then do a mild morphology, findContours, and proceed as before.
-// --------------------------------------------------------------------------------
+// Device code shared with the webapp backend (NVRTC compiles the same file).
+#include "crofton_kernels.cu"
 
 using namespace cv;
 using namespace std;
 
-// Configuration for Crofton
 static const int CROFTON_MAX_POINTS = 239;
-static const float PI = 3.1415927f;
+static const int CANT_PHI = 361;
+static const float PI_F = 3.14159265358979f;
+
+#define CUDA_CHECK(call)                                                       \
+    do {                                                                       \
+        cudaError_t err__ = (call);                                            \
+        if (err__ != cudaSuccess) {                                            \
+            cerr << "CUDA error " << cudaGetErrorString(err__)                 \
+                 << " at " << __FILE__ << ":" << __LINE__ << endl;             \
+            exit(1);                                                           \
+        }                                                                      \
+    } while (0)
 
 // ----------------------------------------------------
-// 1) Resample Contour to nPoints
+// Resample contour to nPoints by uniform arc length
 // ----------------------------------------------------
-vector<Point> resampleContour(const vector<Point>& contour, int nPoints) {
-    vector<Point> resampled;
+vector<Point2f> resampleContour(const vector<Point>& contour, int nPoints) {
+    vector<Point2f> resampled;
     if (contour.empty() || nPoints <= 0) return resampled;
 
-    // Compute perimeter
     vector<double> cumDist;
     cumDist.push_back(0.0);
     double totalLen = 0.0;
     for (size_t i = 0; i < contour.size(); ++i) {
         Point p1 = contour[i];
         Point p2 = contour[(i + 1) % contour.size()];
-        double dx = double(p2.x - p1.x);
-        double dy = double(p2.y - p1.y);
-        double segLen = sqrt(dx*dx + dy*dy);
-        totalLen += segLen;
+        totalLen += hypot(double(p2.x - p1.x), double(p2.y - p1.y));
         cumDist.push_back(totalLen);
     }
 
     if (totalLen < 1e-9) {
-        // Degenerate
-        resampled.resize(nPoints, contour[0]);
+        resampled.resize(nPoints, Point2f(contour[0]));
         return resampled;
     }
 
     double step = totalLen / nPoints;
     resampled.reserve(nPoints);
-
     for (int i = 0; i < nPoints; ++i) {
         double currentDist = i * step;
-        while (currentDist >= totalLen) currentDist -= totalLen;
-
         auto it = std::lower_bound(cumDist.begin(), cumDist.end(), currentDist);
         int idx = int(it - cumDist.begin());
         if (idx == 0) {
-            resampled.push_back(contour[0]);
+            resampled.push_back(Point2f(contour[0]));
         } else {
             int prevIdx = idx - 1;
-            double prevDist = cumDist[prevIdx];
-            double segLen = (cumDist[idx] - prevDist);
-            double frac = (currentDist - prevDist) / segLen;
-
-            Point p1 = contour[prevIdx];
-            Point p2 = contour[idx % contour.size()];
-
-            float x = float(p1.x + frac * (p2.x - p1.x));
-            float y = float(p1.y + frac * (p2.y - p1.y));
-            resampled.push_back(Point(cvRound(x), cvRound(y)));
+            double segLen = cumDist[idx] - cumDist[prevIdx];
+            double frac = segLen > 1e-12 ? (currentDist - cumDist[prevIdx]) / segLen : 0.0;
+            Point2f p1 = Point2f(contour[prevIdx]);
+            Point2f p2 = Point2f(contour[idx % contour.size()]);
+            resampled.push_back(p1 + float(frac) * (p2 - p1));
         }
     }
     return resampled;
 }
 
-// ----------------------------------------------------
-// 2) Crofton descriptor helpers
-// ----------------------------------------------------
-float Sdiametro(const float* borde, int N) {
-    float d=0.0f;
-    for (int i=0; i<N-1; i++){
-        for (int j=i+1; j<N; j++){
-            float dist_X = powf((borde[i] - borde[j]), 2);
-            float dist_Y = powf((borde[N + i] - borde[N + j]), 2);
-            float dist_temp = sqrtf(dist_X + dist_Y);
-            if(d < dist_temp) d=dist_temp;
+// Exact max pairwise distance (O(N^2), N=239 — negligible)
+float Sdiametro(const float* borde, int N, int realN) {
+    float d = 0.0f;
+    for (int i = 0; i < realN - 1; i++) {
+        for (int j = i + 1; j < realN; j++) {
+            float dx = borde[i] - borde[j];
+            float dy = borde[N + i] - borde[N + j];
+            float dist = sqrtf(dx * dx + dy * dy);
+            if (d < dist) d = dist;
         }
     }
     return d;
 }
 
-void SproyectX(const float* borde, int N, int phi, float *SProyX) {
-    for (int i=0; i<phi; i++){
-        float angulo = (i*PI)/180.0f;
-        for (int j=0; j<N; j++){
-            float x = borde[j];
-            float y = borde[N + j];
-            SProyX[i*N + j] = x*cosf(angulo) + y*sinf(angulo);
-        }
-    }
-}
-
 // ----------------------------------------------------
-// 3) __device__ and kernel for Crofton
+// Crofton descriptor on the GPU
 // ----------------------------------------------------
-__device__ float proyectY(float x,float y,float angle) {
-    return x*sinf(-angle) + y*cosf(angle);
-}
-
-static const float BANDA = 10.0f;  // Keep or adjust if needed
-static const float EPS   = 1e-5f;
-
-__device__ void interpolar(...) { /* Your device code here */ }
-__device__ void screateListEtq(...) { /* Your device code here */ }
-__device__ void orden(...) { /* Your device code here */ }
-
-__global__ void kernelCrofton(float *dBorde, float *dSProyX, float *dSMap) {
-    // Your kernel code
-}
-
-// ----------------------------------------------------
-// 4) Descriptor Crofton in GPU with logs
-// ----------------------------------------------------
-void croftonDescriptorGPU(const vector<float> &contourData) {
+void croftonDescriptorGPU(const vector<float>& contourData) {
     ofstream logFile("crofton_log.txt", ios::app);
-    if(!logFile.is_open()){
-        cerr << "Error: no se pudo abrir crofton_log.txt" << endl;
-        return;
+
+    const int N = CROFTON_MAX_POINTS;
+    vector<float> hostBorde(2 * N, 0.0f);
+
+    int realN = int(contourData.size() / 2);
+    if (realN > N) realN = N;
+    for (int i = 0; i < realN; i++) {
+        hostBorde[i]     = contourData[i];
+        hostBorde[N + i] = contourData[realN + i];
     }
 
-    static const int N = CROFTON_MAX_POINTS;
-    float hostBorde[2*N];
-    memset(hostBorde, 0, sizeof(hostBorde));
+    float diam = Sdiametro(hostBorde.data(), N, realN);
 
-    int realNumPoints = int(contourData.size()/2);
-    if(realNumPoints > N) realNumPoints = N;
-
-    for(int i=0; i<realNumPoints; i++){
-        hostBorde[i]       = contourData[i];                 // X
-        hostBorde[N + i]   = contourData[realNumPoints + i]; // Y
+    // Offset window: |projection| <= max ||p|| for every angle, so 2*R always
+    // covers all crossings (the pairwise diameter would clip oblique-angle
+    // crossings on non-centrally-symmetric shapes).
+    float radius = 0.0f;
+    for (int i = 0; i < realN; ++i) {
+        float r = sqrtf(hostBorde[i] * hostBorde[i]
+                        + hostBorde[N + i] * hostBorde[N + i]);
+        if (r > radius) radius = r;
     }
+    float window = 2.0f * radius;
+    int cant_p = max(int(ceilf(radius)), 1);  // binW stays ~2 px
 
-    float diam = Sdiametro(hostBorde, N);
-    int cant_phi = 361;
-    int cant_p   = int(ceil(diam/2.0f));
+    float *dBorde = nullptr, *dSProyX = nullptr, *dSMap = nullptr;
+    float *dCurve = nullptr, *dFeret = nullptr;
+    CUDA_CHECK(cudaMalloc(&dBorde, 2 * N * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&dSProyX, CANT_PHI * N * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&dSMap, cant_p * CANT_PHI * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&dCurve, CANT_PHI * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&dFeret, CANT_PHI * sizeof(float)));
 
-    vector<float> hostSProyX(cant_phi*N, 0.0f);
-    vector<float> hostSMap(cant_p*cant_phi, 0.0f);
+    CUDA_CHECK(cudaMemcpy(dBorde, hostBorde.data(), 2 * N * sizeof(float),
+                          cudaMemcpyHostToDevice));
 
-    SproyectX(hostBorde, N, cant_phi, hostSProyX.data());
+    dim3 block2(16, 16);
+    dim3 grid2((CANT_PHI + 15) / 16, (N + 15) / 16);
+    proyectionKernel<<<grid2, block2>>>(dBorde, dSProyX, N, realN, CANT_PHI);
 
-    float *dBorde=nullptr, *dSProyX=nullptr, *dSMap=nullptr;
-    cudaMalloc((void**)&dBorde,  2*N*sizeof(float));
-    cudaMalloc((void**)&dSProyX, cant_phi*N*sizeof(float));
-    cudaMalloc((void**)&dSMap,   cant_p*cant_phi*sizeof(float));
+    dim3 block1(64);
+    dim3 grid1((CANT_PHI + 63) / 64);
+    kernelCrofton<<<grid1, block1>>>(dSProyX, dSMap, N, realN, CANT_PHI, cant_p, window);
+    reduceKernel<<<grid1, block1>>>(dSProyX, dSMap, dCurve, dFeret,
+                                    N, realN, CANT_PHI, cant_p, window);
+    CUDA_CHECK(cudaGetLastError());
+    CUDA_CHECK(cudaDeviceSynchronize());
 
-    cudaMemcpy(dBorde,  hostBorde,       2*N*sizeof(float),        cudaMemcpyHostToDevice);
-    cudaMemcpy(dSProyX, hostSProyX.data(), cant_phi*N*sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemset(dSMap,   0, cant_p*cant_phi*sizeof(float));
+    vector<float> hostSMap(cant_p * CANT_PHI);
+    vector<float> hostCurve(CANT_PHI), hostFeret(CANT_PHI);
+    CUDA_CHECK(cudaMemcpy(hostSMap.data(), dSMap, hostSMap.size() * sizeof(float),
+                          cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(hostCurve.data(), dCurve, CANT_PHI * sizeof(float),
+                          cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(hostFeret.data(), dFeret, CANT_PHI * sizeof(float),
+                          cudaMemcpyDeviceToHost));
 
-    dim3 blockDim(4);
-    dim3 gridDim((cant_phi + blockDim.x -1)/blockDim.x);
-    kernelCrofton<<<gridDim, blockDim>>>(dBorde, dSProyX, dSMap);
-    cudaDeviceSynchronize();
+    cudaFree(dBorde); cudaFree(dSProyX); cudaFree(dSMap);
+    cudaFree(dCurve); cudaFree(dFeret);
 
-    cudaMemcpy(hostSMap.data(), dSMap, cant_p*cant_phi*sizeof(float), cudaMemcpyDeviceToHost);
+    // Cauchy–Crofton perimeter estimate from the vote map (phi over [0, 180))
+    double perimeter = 0.0;
+    for (int phi = 0; phi < 180; ++phi) perimeter += hostCurve[phi];
+    perimeter *= PI_F / 180.0;
 
-    cudaFree(dBorde);
-    cudaFree(dSProyX);
-    cudaFree(dSMap);
+    float smapMax = *max_element(hostSMap.begin(), hostSMap.end());
 
     logFile << "Diametro calculado: " << diam << endl;
-    logFile << "SMap dimension: " << cant_p << " x " << cant_phi << endl;
-    logFile << "Primeros valores de SMap: ";
-    for(int i=0; i<min(cant_p*cant_phi, 10); i++){
-        logFile << hostSMap[i] << " ";
-    }
-    logFile << "\n-------------------------------------\n";
-    logFile.close();
+    logFile << "SMap dimension: " << cant_p << " x " << CANT_PHI << endl;
+    logFile << "SMap max crossings: " << smapMax << endl;
+    logFile << "Perimetro (Cauchy-Crofton): " << perimeter << endl;
+    logFile << "Descriptor C(phi):" << endl;
+    for (int phi = 0; phi < CANT_PHI; ++phi)
+        logFile << "Angle " << phi << ": " << hostCurve[phi]
+                << "  (feret " << hostFeret[phi] << ")" << endl;
+    logFile << "-------------------------------------" << endl;
+
+    ofstream csv("crofton_descriptor.csv");
+    csv << "phi_deg,crofton,feret\n";
+    for (int phi = 0; phi < CANT_PHI; ++phi)
+        csv << phi << "," << hostCurve[phi] << "," << hostFeret[phi] << "\n";
+
+    cout << "Perimetro (Cauchy-Crofton GPU): " << perimeter << " px" << endl;
+    cout << "SMap max crossings: " << smapMax << endl;
 }
 
 // ----------------------------------------------------
-// 5) MAIN with logs + partial “fix”: Top-Hat in grayscale + HSV mask
+// Preprocessing: HSV mask + grayscale top-hat + morphology
 // ----------------------------------------------------
-int main(int argc, char** argv) {
-    // Reflection on 5–7 potential issues:
-    // (listed above), we suspect we need a top-hat for the faint ring.
-
-    string imagePath = argc > 1 ? argv[1] : "test_cell.jpg";
-
-    // 1) Load color image
-    Mat imgColor = imread(imagePath);
-    if(imgColor.empty()){
-        cerr << "Error: No se pudo cargar la imagen: " << imagePath << "\n";
-        return -1;
-    }
-    imshow("Imagen Original", imgColor);
-
-    // 2) Convert to HSV for color-based mask
+Mat preprocess(const Mat& imgColor) {
     Mat hsv;
     cvtColor(imgColor, hsv, COLOR_BGR2HSV);
-
-    // Widen HSV range a bit
-    Scalar lowerPurple(100, 20, 20);
-    Scalar upperPurple(180, 255, 255);
     Mat maskHSV;
-    inRange(hsv, lowerPurple, upperPurple, maskHSV);
+    inRange(hsv, Scalar(100, 20, 20), Scalar(180, 255, 255), maskHSV);
 
-    // LOG: White pixels in HSV mask BEFORE morph
-    int beforeMorphHSV = countNonZero(maskHSV);
-    cout << "[LOG] White pixels in HSV mask BEFORE morph: " << beforeMorphHSV << endl;
-
-    // 3) Top-Hat transform on grayscale to highlight faint edges
     Mat imgGray;
     cvtColor(imgColor, imgGray, COLOR_BGR2GRAY);
-
-    // We'll do a morphological top-hat: top-hat = original - open(original)
-    // This can highlight bright regions smaller than structuring element
-    Mat kernelTopHat = getStructuringElement(MORPH_ELLIPSE, Size(15,15));
-    Mat openedGray, topHat;
+    Mat kernelTopHat = getStructuringElement(MORPH_ELLIPSE, Size(15, 15));
+    Mat openedGray;
     morphologyEx(imgGray, openedGray, MORPH_OPEN, kernelTopHat);
-    topHat = imgGray - openedGray; // highlight bright structures
+    Mat topHat = imgGray - openedGray;
 
-    // Binarize top-hat with Otsu or fixed threshold
     Mat binTopHat;
     threshold(topHat, binTopHat, 0, 255, THRESH_BINARY | THRESH_OTSU);
 
-    // Log how many white pixels in topHat
-    int whiteTopHat = countNonZero(binTopHat);
-    cout << "[LOG] White pixels in topHat bin: " << whiteTopHat << endl;
-
-    // 4) Combine HSV mask with top-hat result (logical OR)
-    // This might capture both color-based region AND faint grayscale edges
     Mat combined;
     bitwise_or(maskHSV, binTopHat, combined);
 
-    // 5) Morphology on combined (two-step: open then close)
-    Mat kernelOpen = getStructuringElement(MORPH_ELLIPSE, Size(3,3));
-    Mat kernelClose = getStructuringElement(MORPH_ELLIPSE, Size(5,5));
+    Mat kernelOpen = getStructuringElement(MORPH_ELLIPSE, Size(3, 3));
+    Mat kernelClose = getStructuringElement(MORPH_ELLIPSE, Size(5, 5));
     Mat opened, closed;
+    morphologyEx(combined, opened, MORPH_OPEN, kernelOpen);
+    morphologyEx(opened, closed, MORPH_CLOSE, kernelClose);
+    return closed;
+}
 
-    morphologyEx(combined, opened, MORPH_OPEN, kernelOpen, Point(-1,-1), 1);
-    morphologyEx(opened, closed, MORPH_CLOSE, kernelClose, Point(-1,-1), 1);
+int main(int argc, char** argv) {
+    string imagePath = argc > 1 ? argv[1] : "test_cell.jpg";
+    bool show = false;
+    for (int i = 2; i < argc; ++i)
+        if (string(argv[i]) == "--show") show = true;
 
-    int afterOpen = countNonZero(opened);
-    int afterClose = countNonZero(closed);
-    cout << "[LOG] White after open: " << afterOpen
-         << ", after close: " << afterClose << endl;
-
-    imshow("Mask HSV", maskHSV);
-    imshow("TopHat", topHat);
-    imshow("TopHat Bin", binTopHat);
-    imshow("Combined", combined);
-    imshow("Combined Opened", opened);
-    imshow("Combined Closed", closed);
-
-    // 6) findContours on closed
-    vector<vector<Point>> contours;
-    findContours(closed, contours, RETR_EXTERNAL, CHAIN_APPROX_NONE);
-    if(contours.empty()){
-        cerr << "No se encontraron contornos.\n";
-        waitKey(0);
+    Mat imgColor = imread(imagePath);
+    if (imgColor.empty()) {
+        cerr << "Error: No se pudo cargar la imagen: " << imagePath << endl;
         return -1;
     }
 
-    // 7) Largest contour
+    Mat closed = preprocess(imgColor);
+
+    vector<vector<Point>> contours;
+    findContours(closed, contours, RETR_EXTERNAL, CHAIN_APPROX_NONE);
+    if (contours.empty()) {
+        cerr << "No se encontraron contornos." << endl;
+        return -1;
+    }
+
     int largestIdx = 0;
     double largestArea = 0.0;
-    for(size_t i=0; i<contours.size(); i++){
+    for (size_t i = 0; i < contours.size(); i++) {
         double area = contourArea(contours[i]);
-        if(area > largestArea){
-            largestArea = area;
-            largestIdx = (int)i;
-        }
+        if (area > largestArea) { largestArea = area; largestIdx = int(i); }
     }
+    cout << "Contornos: " << contours.size()
+         << " | area mayor: " << largestArea
+         << " | perimetro (OpenCV): " << arcLength(contours[largestIdx], true)
+         << endl;
 
-    // 8) Log average HSV in largest contour
-    double totalH=0, totalS=0, totalV=0;
-    int countHSV=0;
-    for(const auto &pt : contours[largestIdx]) {
-        if(pt.x >= 0 && pt.x < hsv.cols && pt.y >= 0 && pt.y < hsv.rows) {
-            Vec3b hsvPixel = hsv.at<Vec3b>(pt.y, pt.x);
-            totalH += hsvPixel[0];
-            totalS += hsvPixel[1];
-            totalV += hsvPixel[2];
-            countHSV++;
-        }
-    }
-    if(countHSV>0){
-        double avgH = totalH/countHSV;
-        double avgS = totalS/countHSV;
-        double avgV = totalV/countHSV;
-        cout << "[LOG] Average H,S,V in largestContour = "
-             << avgH << ", " << avgS << ", " << avgV << endl;
-    } else {
-        cout << "[LOG] Could not compute average HSV (count=0)\n";
-    }
-
-    // 9) Visualize largest contour
     Mat contourImg = imgColor.clone();
-    drawContours(contourImg, contours, largestIdx, Scalar(0,255,0), 2);
-    imshow("Contorno Detectado", contourImg);
+    drawContours(contourImg, contours, largestIdx, Scalar(0, 255, 0), 2);
+    imwrite("contour_result.jpg", contourImg);
 
-    // 10) Resample to 239
-    vector<Point> resampled = resampleContour(contours[largestIdx], CROFTON_MAX_POINTS);
+    vector<Point2f> resampled = resampleContour(contours[largestIdx], CROFTON_MAX_POINTS);
 
-    // 11) Center
-    Rect box = boundingRect(resampled);
-    float cx = box.x + box.width*0.5f;
-    float cy = box.y + box.height*0.5f;
-    for(auto &pt : resampled){
-        pt.x = cvRound(pt.x - cx);
-        pt.y = cvRound(pt.y - cy);
+    // Center on the exact float bounding-box center (cv::boundingRect returns
+    // an integer Rect and would quantize the center vs the webapp pipeline).
+    float xmin = resampled[0].x, xmax = resampled[0].x;
+    float ymin = resampled[0].y, ymax = resampled[0].y;
+    for (const auto& pt : resampled) {
+        xmin = min(xmin, pt.x); xmax = max(xmax, pt.x);
+        ymin = min(ymin, pt.y); ymax = max(ymax, pt.y);
     }
+    float cx = (xmin + xmax) * 0.5f;
+    float cy = (ymin + ymax) * 0.5f;
+    for (auto& pt : resampled) { pt.x -= cx; pt.y -= cy; }
 
-    // 12) Convert to [x..., y...] and call Crofton
     vector<float> contourData;
-    contourData.reserve(resampled.size()*2);
-    for(const Point &p : resampled){
-        contourData.push_back((float)p.x);
-    }
-    for(const Point &p : resampled){
-        contourData.push_back((float)p.y);
-    }
+    contourData.reserve(resampled.size() * 2);
+    for (const auto& p : resampled) contourData.push_back(p.x);
+    for (const auto& p : resampled) contourData.push_back(p.y);
 
     cout << "\n--- Ejecutando Descriptor Crofton (CUDA) ---" << endl;
     croftonDescriptorGPU(contourData);
+    cout << "Listo: contour_result.jpg, crofton_descriptor.csv, crofton_log.txt" << endl;
 
-    cout << "Proceso finalizado. Revisa crofton_log.txt para ver el descriptor.\n";
-
-    waitKey(0);
+    if (show) {
+        imshow("Contorno Detectado", contourImg);
+        waitKey(0);
+    }
     return 0;
 }

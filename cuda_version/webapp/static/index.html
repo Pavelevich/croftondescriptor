@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crofton Descriptor — NVIDIA CUDA</title>
+<style>
+  :root {
+    --bg: #0b0f17;
+    --panel: #121826;
+    --panel2: #0e1420;
+    --border: #1f2a3d;
+    --text: #e6edf7;
+    --muted: #8b9bb4;
+    --accent: #76b900; /* NVIDIA green */
+    --accent2: #2dd4bf;
+    --danger: #f87171;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 28px; border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #0e1420, #0b0f17);
+  }
+  header h1 { font-size: 19px; font-weight: 650; letter-spacing: .2px; }
+  header h1 span { color: var(--accent); }
+  .gpu-badge {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px;
+    background: var(--panel);
+  }
+  .gpu-dot { width: 9px; height: 9px; border-radius: 50%; background: #555; }
+  .gpu-dot.ok { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  .gpu-dot.err { background: var(--danger); }
+
+  /* layout: fixed sample sidebar + scrollable content */
+  .layout { display: flex; align-items: flex-start; }
+  .sidebar {
+    position: sticky; top: 0; align-self: flex-start;
+    width: 232px; flex: 0 0 232px; height: 100vh; overflow-y: auto;
+    border-right: 1px solid var(--border); background: var(--panel2);
+    padding: 16px 12px 40px;
+  }
+  .sidebar h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .8px;
+                color: var(--muted); margin: 0 4px 10px; }
+  .sb-group { font-size: 11px; text-transform: uppercase; letter-spacing: .6px;
+              color: var(--accent); margin: 14px 4px 6px; font-weight: 600; }
+  .sb-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .sb-thumb { position: relative; cursor: pointer; border-radius: 6px; overflow: hidden;
+              border: 2px solid transparent; background: #000; aspect-ratio: 1; }
+  .sb-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .sb-thumb:hover { border-color: var(--muted); }
+  .sb-thumb.sel { border-color: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  .sb-thumb .cap { position: absolute; bottom: 0; left: 0; right: 0; font-size: 9px;
+                   background: rgba(0,0,0,.6); color: #fff; text-align: center;
+                   padding: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  main { flex: 1; max-width: 1180px; margin: 0 auto; padding: 26px 22px 60px; min-width: 0; }
+  @media (max-width: 760px) { .layout { flex-direction: column; }
+    .sidebar { width: 100%; flex-basis: auto; height: auto; position: static;
+               border-right: none; border-bottom: 1px solid var(--border); } }
+
+  .dropzone {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 6px; width: 100%; min-height: 150px; box-sizing: border-box;
+    border: 2px dashed var(--border); border-radius: 14px;
+    padding: 40px 20px; text-align: center; cursor: pointer;
+    transition: border-color .15s, background .15s;
+    background: var(--panel2);
+  }
+  .dropzone:hover, .dropzone.drag { border-color: var(--accent); background: #101a12; }
+  .dropzone p { color: var(--muted); margin: 0; font-size: 14px; }
+  .dropzone strong { color: var(--text); font-size: 16px; }
+  .dropzone input { display: none; }
+
+  /* big animated "processing on GPU" hero (for demos / video) */
+  .gpu-proc {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 54px 20px; margin-bottom: 16px; border: 1px solid var(--border);
+    border-radius: 18px; background: radial-gradient(circle at 50% 35%, #11260f, var(--panel2));
+  }
+  .gpu-ring {
+    width: 130px; height: 130px; border-radius: 50%; position: relative;
+    background: conic-gradient(from 0deg, var(--accent), #173a05 40%, transparent 75%);
+    animation: gpuspin .85s linear infinite;
+    box-shadow: 0 0 28px rgba(118,185,0,.55), inset 0 0 18px rgba(118,185,0,.25);
+  }
+  .gpu-ring::before { content: ''; position: absolute; inset: 12px; border-radius: 50%;
+    background: var(--panel2); }
+  .gpu-ring .chip { position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; font-weight: 800; font-size: 24px; letter-spacing: 1px;
+    color: var(--accent); animation: gpupulse 1.3s ease-in-out infinite; }
+  @keyframes gpuspin { to { transform: rotate(360deg); } }
+  @keyframes gpupulse { 0%,100% { opacity: .55; transform: scale(.94); }
+    50% { opacity: 1; transform: scale(1.06); } }
+  .gpu-proc .title { font-size: 26px; font-weight: 750; margin-top: 22px; color: var(--text); }
+  .gpu-proc .title b { color: var(--accent); }
+  .gpu-proc .title .dots::after { content: ''; animation: dots 1.2s steps(1,end) infinite; }
+  @keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+  .gpu-proc .sub { color: var(--muted); margin-top: 8px; font-size: 14px; }
+  .gpu-proc .scan { width: min(460px, 82%); height: 7px; border-radius: 4px;
+    background: var(--border); margin-top: 22px; overflow: hidden; position: relative; }
+  .gpu-proc .scan::after { content: ''; position: absolute; top: 0; bottom: 0; left: -45%;
+    width: 45%; border-radius: 4px;
+    background: linear-gradient(90deg, transparent, var(--accent), var(--accent2), transparent);
+    animation: scan 1.05s ease-in-out infinite; }
+  @keyframes scan { to { left: 105%; } }
+
+  .status { margin: 16px 0; font-size: 14px; color: var(--muted); min-height: 20px; }
+  .status.error { color: var(--danger); }
+  .spinner {
+    display: inline-block; width: 14px; height: 14px; border-radius: 50%;
+    border: 2px solid var(--border); border-top-color: var(--accent);
+    animation: spin .7s linear infinite; vertical-align: -2px; margin-right: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 10px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    overflow: hidden;
+  }
+  .card h3 {
+    font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .8px;
+    color: var(--muted); padding: 12px 16px; border-bottom: 1px solid var(--border);
+  }
+  .card .body { padding: 14px 16px; }
+  /* Contain (don't stretch) uploaded photos: portrait, panorama and square
+     all sit centered in a fixed-height frame so the two image cards line up. */
+  .card img { width: 100%; max-height: 360px; object-fit: contain; display: block;
+              border-radius: 8px; background: #05080d; }
+  .card canvas { width: 100%; display: block; border-radius: 8px; background: #05080d; }
+
+  /* SMap sweep overlay — image must fill width exactly so the scan line
+     maps 1:1 to φ (no letterboxing), hence no max-height/object-fit here. */
+  .smap-wrap { position: relative; line-height: 0; }
+  .smap-wrap img { max-height: none; object-fit: fill; }
+  .scanline {
+    position: absolute; top: 0; bottom: 0; width: 2px; left: 0;
+    background: #2dd4bf; box-shadow: 0 0 8px 1px rgba(45,212,191,.8);
+    pointer-events: none; display: none; transform: translateX(-1px);
+  }
+
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .metric {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .metric .k { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+  .metric .v { font-size: 18px; font-weight: 650; margin-top: 3px; }
+  .metric .v small { font-size: 12px; color: var(--muted); font-weight: 400; }
+
+  /* model selector */
+  .modelbar { display: flex; align-items: center; gap: 10px; margin: 0 0 12px;
+              font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+  .modelbar select { background: var(--panel); color: var(--text);
+              border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px;
+              font-size: 13px; cursor: pointer; }
+  .modelbar .info { font-size: 12px; color: var(--accent); }
+
+  /* mode toggle */
+  .modes { display: flex; gap: 8px; margin: 0 0 14px; }
+  .mode-btn {
+    flex: 1; padding: 11px 14px; border-radius: 10px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--panel2); color: var(--muted);
+    font-size: 14px; font-weight: 600; text-align: center; transition: all .15s;
+  }
+  .mode-btn .sub { display: block; font-size: 11px; font-weight: 400; margin-top: 2px; }
+  .mode-btn.active { border-color: var(--accent); color: var(--text); background: #101a12; }
+  .mode-btn.disabled { opacity: .5; cursor: not-allowed; }
+
+  /* classification results */
+  .counts { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
+  .chip { display: flex; align-items: center; gap: 7px; padding: 6px 12px;
+          border: 1px solid var(--border); border-radius: 999px; font-size: 13px; }
+  .chip .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .cell-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+               gap: 10px; }
+  .cell-item { background: var(--panel2); border: 1px solid var(--border);
+               border-radius: 10px; padding: 10px 12px; }
+  .cell-item .hd { display: flex; align-items: center; justify-content: space-between; }
+  .cell-item .nm { font-weight: 650; display: flex; align-items: center; gap: 7px; }
+  .cell-item .atyp { font-size: 10px; color: #fff; background: var(--danger);
+                     border-radius: 4px; padding: 1px 6px; }
+  .bar { height: 6px; border-radius: 3px; background: var(--border); margin: 7px 0; overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: var(--accent); }
+  .cell-item .drv { font-size: 11px; color: var(--muted); }
+
+  /* headline: most likely condition from the GPU analysis */
+  .diagnosis {
+    border: 1px solid var(--border); border-left: 5px solid var(--accent2);
+    border-radius: 12px; padding: 16px 20px; margin-bottom: 16px;
+    background: linear-gradient(90deg, #101a2a, var(--panel));
+  }
+  .diagnosis.warn { border-left-color: #f59e0b; }
+  .diagnosis.alert { border-left-color: var(--danger);
+    background: linear-gradient(90deg, #2a1414, var(--panel)); }
+  .diagnosis.ok { border-left-color: var(--accent); }
+  .diagnosis .lab { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
+  .diagnosis .dx { font-size: 22px; font-weight: 700; margin: 3px 0 4px; }
+  .diagnosis.alert .dx { color: #fca5a5; }
+  .diagnosis.warn .dx { color: #fcd34d; }
+  .diagnosis .ev { font-size: 13px; color: var(--muted); }
+  .diagnosis .also { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .diagnosis .note { font-size: 10.5px; color: #5a6a85; margin-top: 8px; font-style: italic; }
+
+  /* smear-level condition assessment */
+  .cond { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px;
+          background: var(--panel2); border: 1px solid var(--border);
+          border-left: 3px solid var(--accent2); border-radius: 8px; margin-bottom: 8px; }
+  .cond.warn { border-left-color: #f59e0b; }
+  .cond.alert { border-left-color: var(--danger); }
+  .cond .nm { font-weight: 650; font-size: 14px; }
+  .cond .meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .cond .src { font-size: 11px; color: #5a6a85; margin-top: 3px; }
+  .cond .bar { width: 70px; height: 6px; flex: 0 0 70px; margin-top: 6px; }
+  .disclaimer { font-size: 11px; color: var(--muted); margin-top: 10px;
+                border-top: 1px dashed var(--border); padding-top: 8px; font-style: italic; }
+
+  .hidden { display: none; }
+  footer { text-align: center; color: #5a6a85; font-size: 12px; padding: 18px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Crofton Descriptor <span>· CUDA</span></h1>
+  <div class="gpu-badge"><div id="gpuDot" class="gpu-dot"></div><span id="gpuName">Detecting GPU…</span></div>
+</header>
+
+<div class="layout">
+<aside class="sidebar">
+  <h2>Sample images</h2>
+  <p style="font-size:11px;color:var(--muted);margin:0 4px 8px">Click one to process it on the GPU</p>
+  <div id="gallery"></div>
+</aside>
+
+<main>
+  <div class="modelbar">
+    <span>Trained model:</span>
+    <select id="modelSelect"></select>
+    <span class="info" id="modelInfo"></span>
+  </div>
+  <div class="modes">
+    <div class="mode-btn active" id="modeDescriptor" data-mode="descriptor">
+      Shape descriptor<span class="sub">single contour · Crofton signature C(φ)</span>
+    </div>
+    <div class="mode-btn" id="modeClassify" data-mode="classify">
+      Cell classification<span class="sub" id="classifySub">segment all cells · predict type</span>
+    </div>
+  </div>
+
+  <label class="dropzone" id="dropzone">
+    <strong id="dzTitle">Upload a photo — the contour is detected on your NVIDIA GPU</strong>
+    <p>Drag an image here or click to choose one (JPG / PNG)</p>
+    <input type="file" id="fileInput" accept="image/*">
+  </label>
+
+  <div class="gpu-proc hidden" id="gpuProcessing">
+    <div class="gpu-ring"><div class="chip">GPU</div></div>
+    <div class="title" id="procTitle">Processing on GPU<span class="dots"></span></div>
+    <div class="sub" id="procSub">NVIDIA CUDA</div>
+    <div class="scan"></div>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <div class="hidden" id="classifyResults">
+    <div class="diagnosis" id="diagnosis"></div>
+    <div class="grid">
+      <div class="card" style="grid-column: 1 / -1;">
+        <h3>Classified cells</h3>
+        <div class="body"><img id="imgClassOverlay" alt="classified cells"></div>
+      </div>
+      <div class="card" style="grid-column: 1 / -1;">
+        <h3>Population summary</h3>
+        <div class="body"><div class="counts" id="counts"></div></div>
+      </div>
+      <div class="card" style="grid-column: 1 / -1;">
+        <h3>Smear-level assessment — suspected conditions</h3>
+        <div class="body">
+          <div id="assessSummary" style="font-size:14px;margin-bottom:10px"></div>
+          <div id="conditionList"></div>
+          <div id="assessDisclaimer" class="disclaimer"></div>
+        </div>
+      </div>
+      <div class="card" style="grid-column: 1 / -1;">
+        <h3>Per-cell predictions</h3>
+        <div class="body"><div class="cell-list" id="cellList"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid hidden" id="results">
+    <div class="card">
+      <h3>Original image</h3>
+      <div class="body"><img id="imgOriginal" alt="original"></div>
+    </div>
+    <div class="card">
+      <h3>Detected contour</h3>
+      <div class="body"><img id="imgOverlay" alt="contour"></div>
+    </div>
+    <div class="card">
+      <h3>Crofton signature — C(φ)</h3>
+      <div class="body"><canvas id="croftonChart" width="560" height="260"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Chord map (SMap p × φ)</h3>
+      <div class="body"><div class="smap-wrap"><img id="imgSmap" alt="smap"><div id="smapScan" class="scanline"></div></div></div>
+    </div>
+    <div class="card" style="grid-column: 1 / -1;">
+      <h3>Metrics</h3>
+      <div class="body metrics" id="metrics"></div>
+    </div>
+  </div>
+</main>
+</div>
+
+<footer>Crofton descriptor accelerated with CUDA (CuPy + NVRTC) · contour extracted with OpenCV</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let GPU_NAME = 'NVIDIA CUDA';
+
+// big animated "processing on GPU" overlay (demo/video). A minimum display
+// time keeps the animation visible even when the GPU finishes in milliseconds.
+const PROC_MIN_MS = 850;
+let procStart = 0;
+function showProcessing() {
+  procStart = performance.now();
+  $('procTitle').innerHTML = (MODE === 'classify'
+    ? 'Segmenting &amp; classifying on <b>GPU</b>'
+    : 'Extracting contour on <b>GPU</b>') + '<span class="dots"></span>';
+  $('procSub').textContent = GPU_NAME + ' · CUDA';
+  $('gpuProcessing').classList.remove('hidden');
+}
+async function hideProcessing() {
+  const el = performance.now() - procStart;
+  if (el < PROC_MIN_MS) await new Promise(r => setTimeout(r, PROC_MIN_MS - el));
+  $('gpuProcessing').classList.add('hidden');
+}
+
+async function checkGPU() {
+  try {
+    const r = await fetch('/api/health');
+    const j = await r.json();
+    if (j.gpu_ok) {
+      $('gpuDot').classList.add('ok');
+      GPU_NAME = j.gpu_name;
+      $('gpuName').textContent = j.gpu_name + ' · CC ' + j.compute_capability;
+    } else {
+      $('gpuDot').classList.add('err');
+      $('gpuName').textContent = 'GPU unavailable: ' + (j.error || 'unknown');
+    }
+  } catch (e) {
+    $('gpuDot').classList.add('err');
+    $('gpuName').textContent = 'Backend not responding';
+  }
+}
+checkGPU();
+
+// ---- sample-image gallery (fixed sidebar) ---------------------------------
+async function loadGallery() {
+  let j;
+  try { j = await (await fetch('/api/samples')).json(); }
+  catch (e) { $('gallery').innerHTML = '<p style="font-size:11px;color:var(--muted)">No samples</p>'; return; }
+  const groups = {};
+  j.samples.forEach(s => { (groups[s.group] = groups[s.group] || []).push(s); });
+  let html = '';
+  for (const g of Object.keys(groups)) {
+    html += `<div class="sb-group">${g}</div><div class="sb-grid">`;
+    html += groups[g].map(s =>
+      `<div class="sb-thumb" data-id="${s.id}" title="${s.label}">
+         <img loading="lazy" src="/api/sample/${encodeURIComponent(s.id)}?thumb=true">
+         <span class="cap">${s.label}</span>
+       </div>`).join('');
+    html += '</div>';
+  }
+  $('gallery').innerHTML = html;
+  document.querySelectorAll('.sb-thumb').forEach(el => {
+    el.addEventListener('click', () => selectSample(el));
+  });
+}
+loadGallery();
+
+async function selectSample(el) {
+  document.querySelectorAll('.sb-thumb').forEach(t => t.classList.remove('sel'));
+  el.classList.add('sel');
+  const id = el.dataset.id;
+  $('status').className = 'status';
+  $('status').innerHTML = '<span class="spinner"></span>Loading sample…';
+  try {
+    const blob = await (await fetch('/api/sample/' + encodeURIComponent(id))).blob();
+    const file = new File([blob], id + '.jpg', { type: blob.type || 'image/jpeg' });
+    processFile(file);
+  } catch (e) {
+    $('status').className = 'status error';
+    $('status').textContent = 'Error loading sample: ' + e.message;
+  }
+}
+
+// ---- mode selection (shape descriptor vs cell classification) -------------
+let MODE = 'descriptor';
+let modelTrained = false;
+let lastFile = null;
+
+function setClassifySub(nClasses) {
+  if (!modelTrained) {
+    $('classifySub').textContent = 'model not trained yet — run classify.py train';
+    $('modeClassify').classList.add('disabled');
+  } else {
+    $('classifySub').textContent = 'segment all cells · ' + nClasses + ' classes';
+    $('modeClassify').classList.remove('disabled');
+  }
+}
+
+async function loadModels() {
+  let j;
+  try { j = await (await fetch('/api/models')).json(); }
+  catch (e) { return; }
+  modelTrained = j.models.length > 0;
+  const sel = $('modelSelect');
+  sel.innerHTML = j.models.map(m =>
+    `<option value="${m.id}"${m.id === j.active ? ' selected' : ''}>${m.name}</option>`).join('');
+  const active = j.models.find(m => m.id === j.active) || j.models[0];
+  if (active) { $('modelInfo').textContent = active.n_classes + ' classes'; setClassifySub(active.n_classes); }
+  sel.addEventListener('change', async () => {
+    const id = sel.value;
+    $('modelInfo').textContent = 'switching…';
+    try {
+      const r = await (await fetch('/api/select_model', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      })).json();
+      $('modelInfo').textContent = r.classes.length + ' classes';
+      setClassifySub(r.classes.length);
+      if (lastFile && MODE === 'classify') processFile(lastFile);  // re-run with new model
+    } catch (e) { $('modelInfo').textContent = 'error'; }
+  });
+}
+loadModels();
+
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (btn.dataset.mode === 'classify' && !modelTrained) return;
+    MODE = btn.dataset.mode;
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b === btn));
+    $('dzTitle').textContent = MODE === 'classify'
+      ? 'Upload a smear — every cell is segmented & classified on your GPU'
+      : 'Upload a photo — the contour is detected on your NVIDIA GPU';
+    $('results').classList.add('hidden');
+    $('classifyResults').classList.add('hidden');
+    if (lastFile) processFile(lastFile);   // re-run current image in the new mode
+  });
+});
+
+const dz = $('dropzone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('drag');
+  if (e.dataTransfer.files.length) {
+    processFile(e.dataTransfer.files[0]);
+  } else {
+    $('status').className = 'status error';
+    $('status').textContent = 'That is not a file — drag an image from your computer or click to choose one.';
+  }
+});
+$('fileInput').addEventListener('change', e => {
+  if (e.target.files.length) processFile(e.target.files[0]);
+});
+
+async function processFile(file) {
+  lastFile = file;
+  $('status').className = 'status';
+  $('status').textContent = '';
+  showProcessing();
+  $('results').classList.add('hidden');
+  $('classifyResults').classList.add('hidden');
+
+  const fd = new FormData();
+  fd.append('file', file);
+
+  if (MODE === 'classify') { return classifyFile(file, fd); }
+
+  let j;
+  try {
+    const r = await fetch('/api/process', { method: 'POST', body: fd });
+    j = await r.json();
+    if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+  } catch (e) {
+    await hideProcessing();
+    $('status').className = 'status error';
+    $('status').textContent = 'Error: ' + e.message;
+    return;
+  }
+  await hideProcessing();
+
+  $('imgOriginal').src = URL.createObjectURL(file);
+  $('imgOverlay').src = 'data:image/jpeg;base64,' + j.overlay_png;
+  $('imgSmap').src = 'data:image/png;base64,' + j.smap_png;
+  drawCrofton(j.crofton_curve);
+
+  const t = j.timings, m = j.metrics;
+  $('metrics').innerHTML = `
+    <div class="metric"><div class="k">Contours found</div><div class="v">${m.num_contours}</div></div>
+    <div class="metric"><div class="k">Segmentation</div><div class="v" style="font-size:14px">${j.method}</div></div>
+    <div class="metric"><div class="k">Perimeter (contour)</div><div class="v">${m.perimeter.toFixed(1)} <small>px</small></div></div>
+    <div class="metric"><div class="k">Perimeter (Crofton GPU)</div><div class="v">${m.perimeter_crofton.toFixed(1)} <small>px</small></div></div>
+    <div class="metric"><div class="k">Area</div><div class="v">${m.area.toFixed(0)} <small>px²</small></div></div>
+    <div class="metric"><div class="k">Diameter</div><div class="v">${m.diameter.toFixed(1)} <small>px</small></div></div>
+    <div class="metric"><div class="k">Resampled points</div><div class="v">${m.n_points}</div></div>
+    <div class="metric"><div class="k">GPU (Crofton kernels)</div><div class="v">${t.gpu_ms.toFixed(2)} <small>ms</small></div></div>
+    <div class="metric"><div class="k">Preprocessing + contour</div><div class="v">${t.cpu_ms.toFixed(1)} <small>ms</small></div></div>
+    <div class="metric"><div class="k">Total</div><div class="v">${t.total_ms.toFixed(1)} <small>ms</small></div></div>
+  `;
+
+  $('status').textContent = '✓ Contour detected with ' + j.device;
+  $('results').classList.remove('hidden');
+}
+
+// ---- Cell classification mode --------------------------------------------
+async function classifyFile(file, fd) {
+  let j;
+  try {
+    const r = await fetch('/api/classify', { method: 'POST', body: fd });
+    j = await r.json();
+    if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+  } catch (e) {
+    await hideProcessing();
+    $('status').className = 'status error';
+    $('status').textContent = 'Error: ' + e.message;
+    return;
+  }
+  await hideProcessing();
+
+  $('imgClassOverlay').src = 'data:image/jpeg;base64,' + j.overlay_png;
+
+  // headline: most likely condition from the GPU analysis. Surface a clinically
+  // urgent (alert) finding first even if its score is slightly lower, else the
+  // highest-score candidate.
+  const a = j.assessment;
+  const sevRank = { alert: 2, warn: 1, info: 0 };
+  const ranked = a && a.candidates
+    ? [...a.candidates].sort((x, y) =>
+        (sevRank[y.severity] || 0) - (sevRank[x.severity] || 0) || y.score - x.score)
+    : [];
+  const top = ranked[0];
+  const dx = $('diagnosis');
+  if (top) {
+    dx.className = 'diagnosis ' + (top.severity || 'info');
+    const also = ranked.slice(1, 3).map(c => c.condition).join(' · ');
+    dx.innerHTML = `
+      <div class="lab">Most likely condition · GPU shape analysis</div>
+      <div class="dx">${top.condition}</div>
+      <div class="ev">Evidence: ${top.evidence}${top.confirm ? ' — confirm with ' + top.confirm : ''}</div>
+      ${also ? `<div class="also">Also consider: ${also}</div>` : ''}
+      <div class="note">${a.disclaimer}</div>`;
+  } else {
+    dx.className = 'diagnosis ok';
+    dx.innerHTML = `
+      <div class="lab">Most likely condition · GPU shape analysis</div>
+      <div class="dx">No specific condition flagged</div>
+      <div class="ev">${a ? a.summary : 'Predominantly normal red-cell morphology.'}</div>
+      ${a ? `<div class="note">${a.disclaimer}</div>` : ''}`;
+  }
+
+  // population summary chips (per class), colored to match the overlay
+  const colors = j.class_colors || {};
+  let chips = Object.entries(j.counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([cls, n]) =>
+      `<div class="chip"><span class="dot" style="background:${colors[cls] || '#888'}"></span>${cls}: <b>${n}</b></div>`
+    ).join('');
+  if (j.n_atypical != null) {
+    chips += `<div class="chip" style="border-color:var(--danger)">
+      <span class="dot" style="background:var(--danger)"></span>atypical (One-Class SVM): <b>${j.n_atypical}</b>/${j.n_cells}</div>`;
+  }
+  $('counts').innerHTML = chips || '<span style="color:var(--muted)">no cells</span>';
+
+  // per-cell cards
+  $('cellList').innerHTML = j.cells.map(c => {
+    const pct = (c.confidence * 100).toFixed(0);
+    const drv = (c.drivers || []).map(d =>
+      `${d.name}=${d.value.toFixed(2)}`).join(' · ');
+    const color = colors[c.label] || '#888';
+    return `<div class="cell-item">
+      <div class="hd">
+        <span class="nm"><span class="dot" style="background:${color}"></span>${c.label}</span>
+        ${c.atypical ? '<span class="atyp">ATYPICAL</span>' : ''}
+      </div>
+      <div class="bar"><i style="width:${pct}%"></i></div>
+      <div class="drv">conf ${pct}% · drivers: ${drv}</div>
+    </div>`;
+  }).join('');
+
+  // smear-level condition assessment (decision-support) — `a` set above
+  if (a) {
+    $('assessSummary').innerHTML = `<b>${a.summary}</b>`;
+    const sevClass = { info: '', warn: 'warn', alert: 'alert' };
+    $('conditionList').innerHTML = (a.candidates || []).map(c => {
+      const sc = Math.min(100, Math.round(c.score * 100));
+      return `<div class="cond ${sevClass[c.severity] || ''}">
+        <div style="flex:1">
+          <div class="nm">${c.condition}</div>
+          <div class="meta">evidence: ${c.evidence}${c.confirm ? ' · confirm: ' + c.confirm : ''}</div>
+          ${c.source ? `<div class="src">${c.source}</div>` : ''}
+        </div>
+        <div><div class="bar"><i style="width:${sc}%"></i></div></div>
+      </div>`;
+    }).join('') || '<div style="color:var(--muted);font-size:13px">No specific condition pattern matched.</div>';
+    $('assessDisclaimer').textContent = a.disclaimer;
+  }
+
+  $('status').textContent = `✓ ${j.n_cells} cells classified on GPU (mask: ${j.method})`;
+  $('classifyResults').classList.remove('hidden');
+}
+
+// ---- Animated φ sweep, synchronized across C(φ) and the SMap --------------
+// The Crofton descriptor is built one projection angle per column, so a
+// constant sweep of φ ∈ [0,360°) is the physically meaningful animation:
+// in C(φ) it "draws" the signature as it advances and marks the current
+// value; the same vertical scan line walks the SMap columns in lock-step.
+const SWEEP_MS = 7000;          // one full revolution
+let animCurve = null;           // current 361-sample signature
+let animRAF = null;
+let animStart = 0;
+
+function drawCrofton(curve) {
+  if (animRAF) cancelAnimationFrame(animRAF);
+  animCurve = (curve && curve.length) ? curve : null;
+  $('smapScan').style.display = animCurve ? 'block' : 'none';
+  if (!animCurve) return;
+  animStart = performance.now();
+  animRAF = requestAnimationFrame(sweepFrame);
+}
+
+function sweepFrame(now) {
+  const phase = ((now - animStart) % SWEEP_MS) / SWEEP_MS;  // 0..1
+  const phi = phase * 360;                                   // current angle
+  drawCroftonFrame(phi);
+  // SMap φ runs left→right across the full image width
+  $('smapScan').style.left = (phase * 100).toFixed(3) + '%';
+  animRAF = requestAnimationFrame(sweepFrame);
+}
+
+function drawCroftonFrame(phi) {
+  const curve = animCurve;
+  const c = $('croftonChart'), ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  const pad = 34, w = c.width - pad * 2, h = c.height - pad * 2;
+  const max = Math.max(...curve), min = Math.min(...curve);
+  const span = (max - min) || 1;
+  const n = curve.length;
+  const xOf = i => pad + (i / (n - 1)) * w;
+  const yOf = v => pad + h - ((v - min) / span) * h;
+
+  // grid + axes
+  ctx.strokeStyle = '#1f2a3d'; ctx.lineWidth = 1; ctx.beginPath();
+  for (let g = 0; g <= 4; g++) { const y = pad + h * g / 4; ctx.moveTo(pad, y); ctx.lineTo(pad + w, y); }
+  ctx.stroke();
+  ctx.fillStyle = '#8b9bb4'; ctx.font = '11px sans-serif';
+  ctx.fillText(max.toFixed(1), 2, pad + 4);
+  ctx.fillText(min.toFixed(1), 2, pad + h + 4);
+  ctx.fillText('0°', pad, c.height - 8);
+  ctx.fillText('180°', pad + w / 2 - 12, c.height - 8);
+  ctx.fillText('360°', pad + w - 24, c.height - 8);
+
+  // full signature, dimmed (the "not yet swept" part)
+  ctx.strokeStyle = 'rgba(118,185,0,0.28)'; ctx.lineWidth = 1.5; ctx.beginPath();
+  for (let i = 0; i < n; i++) { const x = xOf(i), y = yOf(curve[i]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+  ctx.stroke();
+
+  // fraction of φ already swept (continuous index)
+  const fIdx = (phi / 360) * (n - 1);
+  const upto = Math.floor(fIdx);
+
+  // filled area under the swept portion
+  ctx.beginPath();
+  ctx.moveTo(xOf(0), pad + h);
+  for (let i = 0; i <= upto; i++) ctx.lineTo(xOf(i), yOf(curve[i]));
+  const curVal = curve[upto] + (curve[Math.min(upto + 1, n - 1)] - curve[upto]) * (fIdx - upto);
+  const curX = pad + (phi / 360) * w, curY = yOf(curVal);
+  ctx.lineTo(curX, curY); ctx.lineTo(curX, pad + h); ctx.closePath();
+  ctx.fillStyle = 'rgba(118,185,0,0.14)'; ctx.fill();
+
+  // bright swept signature
+  ctx.strokeStyle = '#76b900'; ctx.lineWidth = 2.4; ctx.beginPath();
+  for (let i = 0; i <= upto; i++) { const x = xOf(i), y = yOf(curve[i]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+  ctx.lineTo(curX, curY);
+  ctx.stroke();
+
+  // sweep line + current-angle marker
+  ctx.strokeStyle = 'rgba(45,212,191,0.85)'; ctx.lineWidth = 1.5; ctx.beginPath();
+  ctx.moveTo(curX, pad); ctx.lineTo(curX, pad + h); ctx.stroke();
+  ctx.fillStyle = '#2dd4bf'; ctx.beginPath(); ctx.arc(curX, curY, 4, 0, Math.PI * 2); ctx.fill();
+
+  // current φ / C(φ) readout
+  ctx.fillStyle = '#e6edf7'; ctx.font = '12px sans-serif'; ctx.textAlign = 'right';
+  ctx.fillText('φ ' + phi.toFixed(0) + '°  ·  C ' + curVal.toFixed(0) + ' px', pad + w, pad - 18 < 0 ? 12 : pad - 6);
+  ctx.textAlign = 'left';
+}
+</script>
+</body>
+</html>

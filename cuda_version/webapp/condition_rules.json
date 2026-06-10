@@ -1,0 +1,118 @@
+[
+  {
+    "key": "sickle_cell_disease",
+    "condition": "Sickle cell disease (HbSS / sickle syndromes)",
+    "triggers": ["sickle", "elongated"],
+    "threshold": 0.03,
+    "severity": "alert",
+    "confirm": "Hb electrophoresis / HPLC (HbS band), 2 orthogonal methods",
+    "source": "StatPearls NBK482164; ASH Image Bank (drepanocytes)"
+  },
+  {
+    "key": "hereditary_elliptocytosis",
+    "condition": "Hereditary elliptocytosis (HE)",
+    "triggers": ["elliptocyte", "ovalocyte", "elongated"],
+    "threshold": 0.25,
+    "severity": "warn",
+    "confirm": "exclude IDA/megaloblastic; family history; osmotic gradient ektacytometry; EPB41/SPTA1/SPTB",
+    "source": "StatPearls NBK562333; Merck Manual (>=60% + family hx)"
+  },
+  {
+    "key": "hereditary_spherocytosis_aiha",
+    "condition": "Hereditary spherocytosis / Autoimmune hemolytic anemia",
+    "triggers": ["spherocyte"],
+    "threshold": 0.25,
+    "severity": "warn",
+    "confirm": "DAT/Coombs (+ -> AIHA, - -> HS); EMA-binding flow cytometry; MCHC; reticulocytes",
+    "source": "ASH Blood 2013 (EMA binding); ICSH spherocyte grading"
+  },
+  {
+    "key": "maha",
+    "condition": "Microangiopathic hemolytic anemia (TTP / HUS / DIC)",
+    "triggers": ["schistocyte"],
+    "threshold": 0.01,
+    "severity": "alert",
+    "confirm": "URGENT: schistocytes >1% is clinically significant; platelets, LDH, haptoglobin, coags, ADAMTS13, clinical context",
+    "source": "ICSH schistocyte guideline (>1% threshold); StatPearls NBK562141"
+  },
+  {
+    "key": "myelofibrosis",
+    "condition": "Primary myelofibrosis / marrow infiltration (myelophthisis)",
+    "triggers": ["teardrop"],
+    "threshold": 0.10,
+    "severity": "warn",
+    "confirm": "leukoerythroblastic picture (nucleated RBCs + left-shifted granulocytes); bone marrow biopsy; JAK2/CALR/MPL",
+    "source": "StatPearls NBK562141; ASH Image Bank (dacrocytes)"
+  },
+  {
+    "key": "iron_deficiency_anemia",
+    "condition": "Iron deficiency anemia (IDA)",
+    "triggers": ["microcyte", "hypochromia", "elliptocyte"],
+    "threshold": 0.20,
+    "requires_all": ["microcyte", "hypochromia"],
+    "min_each": 0.08,
+    "severity": "warn",
+    "confirm": "CBC indices (low MCV/MCH, high RDW); ferritin/iron studies; pencil cells support IDA",
+    "source": "StatPearls NBK562141; needs CBC indices"
+  },
+  {
+    "key": "thalassemia_trait",
+    "condition": "Thalassemia trait (beta / alpha)",
+    "triggers": ["microcyte", "hypochromia", "target"],
+    "threshold": 0.20,
+    "requires_all": ["microcyte", "target"],
+    "min_each": 0.06,
+    "severity": "warn",
+    "confirm": "low MCV with NORMAL/low RDW (vs IDA's high RDW); Hb electrophoresis (HbA2/HbF); iron studies normal",
+    "source": "Merck Manual; distinguish from IDA by RDW + iron studies"
+  },
+  {
+    "key": "megaloblastic_anemia",
+    "condition": "Megaloblastic anemia (B12 / folate deficiency)",
+    "triggers": ["macrocyte", "ovalocyte", "teardrop"],
+    "threshold": 0.20,
+    "requires_all": ["macrocyte"],
+    "min_each": 0.10,
+    "severity": "warn",
+    "confirm": "high MCV; macro-ovalocytes + hypersegmented neutrophils; serum B12/folate, LDH, bilirubin",
+    "source": "StatPearls NBK562141"
+  },
+  {
+    "key": "thalassemia_liver_hbc",
+    "condition": "Thalassemia / liver disease / HbC (target-cell pattern)",
+    "triggers": ["target"],
+    "threshold": 0.10,
+    "severity": "info",
+    "confirm": "Hb electrophoresis/HPLC; MCV (low -> thalassemia/HbC, normal/high -> liver); LFTs",
+    "source": "ASH Image Bank (target cells); Merck Manual (HbC)"
+  },
+  {
+    "key": "uremia",
+    "condition": "Uremia / chronic kidney disease (burr cells)",
+    "triggers": ["burr"],
+    "threshold": 0.20,
+    "severity": "info",
+    "confirm": "renal function (urea/creatinine); echinocytes are also a common storage/EDTA artifact",
+    "source": "StatPearls NBK562141 (medium confidence)"
+  },
+  {
+    "key": "liver_stomatocytosis",
+    "condition": "Liver disease / alcoholism / hereditary stomatocytosis",
+    "triggers": ["stomatocyte", "target"],
+    "threshold": 0.20,
+    "requires_all": ["stomatocyte"],
+    "min_each": 0.12,
+    "severity": "info",
+    "confirm": "LFTs; alcohol history; stomatocytes are also a smear/EDTA artifact in low numbers",
+    "source": "StatPearls NBK562141 (medium confidence)"
+  },
+  {
+    "key": "anisopoikilocytosis",
+    "condition": "Nonspecific anisopoikilocytosis (rule-out — not a diagnosis)",
+    "triggers": ["poikilocyte", "teardrop", "schistocyte", "ovalocyte", "burr"],
+    "threshold": 0.40,
+    "severity": "info",
+    "confirm": "no single pattern dominates; correlate with CBC indices and clinical context",
+    "source": "general poikilocytosis differential (StatPearls NBK562141)"
+  }
+]
