@@ -49,3 +49,14 @@ apple_silicon_version/image-shape-explorer/vite_react_shadcn_ts@0.0.0
 *.log
 *.tmp
 crofton_log.txt
+
+# Downloaded datasets (large — fetch via cuda_version/README.md instructions)
+/datasets/
+
+# Trained model artifacts (large/regenerable — train with classify.py train --out ...)
+*.joblib
+cuda_version/webapp/models/
+
+# Native-run generated outputs
+crofton_descriptor.csv
+contour_result.jpg
