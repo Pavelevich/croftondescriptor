@@ -266,7 +266,7 @@ Same as main project. See root LICENSE file.
 
 ## 👥 Authors
 
-- Pavel Chmirenko - Original CUDA implementation
+- Original CUDA implementation
 - Metal Optimization - This implementation
 
 ## 🙏 Acknowledgments

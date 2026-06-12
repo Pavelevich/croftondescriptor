@@ -219,7 +219,7 @@ If this work is useful in your research, please cite:
 @software{crofton_boundary_detection,
   title = {Crofton-Based Cell Boundary Detection with CUDA and Metal},
   year  = {2025},
-  author= {Pavel Chmirenko et al.},
+  author= {Anonymous et al.},
   url   = {https://github.com/Pavelevich/croftondescriptor},
   note  = {GPU-accelerated iterative segmentation and Crofton analysis}
 }

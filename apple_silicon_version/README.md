@@ -345,9 +345,7 @@ This project builds upon the Crofton descriptor research and implements optimiza
 
 ## 👨‍💻 Author
 
-**Pavel Chmirenko**  
-Email: developer31f@gmail.com  
-GitHub: @pchmirenko
+**Anonymous**
 
 ## 📚 References
 
